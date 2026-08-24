@@ -17,7 +17,12 @@
 
 用法
 ----
-    python -m plugins.bi_gate.probe      # 退出码 0=存活，1=门禁失效，2=探针自身出错
+    python plugins/bi-gate/probe.py      # 退出码 0=存活，1=门禁失效，2=探针自身出错
+
+插件目录名带连字符（``bi-gate``），不是合法的 Python 包名，所以 ``python -m`` 那种
+写法跑不起来 —— 直接执行脚本文件即可。执行时需要仓库根目录在 ``PYTHONPATH`` 上，
+探针才导得到 ``model_tools``；``invoke_hook`` 会自行完成插件发现与加载，因此这个
+独立进程走的正是真实的加载路径，config.yaml 里漏配 ``plugins.enabled`` 一样会被它抓到。
 
 退出码给 cron / 监控用。1 必须告警：它意味着此刻任何 query_metric 都能穿过去。
 """
@@ -82,6 +87,35 @@ def probe(dispatch: Optional[Any] = None) -> ProbeResult:
     )
 
 
+def _gate_source() -> str:
+    """取门禁来源常量。
+
+    探针既可能以插件包的一部分被 import，也可能作为独立脚本执行（cron / 监控）。
+    包内 import 只在前一种情形成立，后一种下 ``__package__`` 为空，相对 import 会
+    直接报 ImportError。所以按文件路径兜底加载 ``rules`` —— 它是纯判定逻辑、没有
+    副作用，加载它不会触发任何插件注册，探针"不 import 插件本身"的前提仍然成立。
+    """
+    try:
+        from .rules import GATE_SOURCE  # 只取常量，不触发插件注册
+        return GATE_SOURCE
+    except ImportError:
+        pass
+
+    import importlib.util
+    from pathlib import Path
+
+    rules_path = Path(__file__).resolve().parent / "rules.py"
+    spec = importlib.util.spec_from_file_location("_bi_gate_rules_probe", rules_path)
+    if spec is None or spec.loader is None:  # pragma: no cover - 文件缺失
+        raise ImportError(f"读不到 {rules_path}")
+    module = importlib.util.module_from_spec(spec)
+    # 必须先登记进 sys.modules 再执行：rules 里用了 @dataclass，而 dataclasses
+    # 会按 cls.__module__ 回查 sys.modules，查不到就抛 AttributeError。
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module.GATE_SOURCE
+
+
 def _looks_blocked(raw: Any) -> bool:
     """判断一次调用是否被门禁拦下。
 
@@ -92,7 +126,7 @@ def _looks_blocked(raw: Any) -> bool:
     ``ensure_ascii=False``，中文原样落在结果里；但万一哪层改成转义，
     只认原文会让探针误报"门禁失效"。误报方向虽然安全，却会消耗对告警的信任。
     """
-    from .rules import GATE_SOURCE  # 只取常量，不触发插件注册
+    GATE_SOURCE = _gate_source()
 
     text = raw if isinstance(raw, str) else json.dumps(raw, ensure_ascii=False, default=str)
     if GATE_SOURCE in text:

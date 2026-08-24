@@ -209,6 +209,19 @@ def _gate_error_block(args: Any, context: Mapping[str, Any]) -> Dict[str, str]:
     }
 
 
+def _is_gate_block(result: Any) -> bool:
+    """这次调用是不是被本门禁拦下的。
+
+    只认「结果里出现了门禁来源」这一种形态，和存活探针用同一个判据 ——
+    文案会改，"被本门禁拦了"这件事的形态不会。同时匹配 ``ensure_ascii=True``
+    的转义形态，理由同 :func:`probe._looks_blocked`。
+    """
+    if result is None:
+        return False
+    text = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False, default=str)
+    return GATE_SOURCE in text or json.dumps(GATE_SOURCE)[1:-1] in text
+
+
 def _on_post_tool_call(
     tool_name: str = "",
     args: Any = None,
@@ -218,8 +231,17 @@ def _on_post_tool_call(
     """放行后的回执，用来把「拦没拦」和「查出什么」对上。
 
     只观察，不改结果。
+
+    注意：Hermes 在 ``pre_tool_call`` 拦下调用之后，**仍然会触发**
+    ``post_tool_call``（本地实测，2026-08-24：探针的 canary 调用被拦，
+    这里照样被调到一次）。所以必须先认出「这是被门禁拦下的调用」并跳过，
+    否则每条拒绝都会再配一条 ``gate_result: passed``，审计日志会自相矛盾 ——
+    而审计日志正是事后唯一能查的东西。
     """
     if tool_name != GATED_TOOL:
+        return
+    if _is_gate_block(result):
+        # pre 钩子已经把判定写进审计了，这里再记一条只会让日志说谎。
         return
     logger.info(
         "bi-gate passed-call %s",

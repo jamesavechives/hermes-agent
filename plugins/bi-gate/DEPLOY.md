@@ -33,9 +33,19 @@ plugins:
 探针只能看到自己所在 profile 的门禁。`bi` 的门禁挂了，`cs` 的探针发现不了。
 
 ```bash
-HERMES_HOME=/data/profiles/bi  python -m plugins.bi_gate.probe
-HERMES_HOME=/data/profiles/cs  python -m plugins.bi_gate.probe
+HERMES_HOME=/data/profiles/bi  PYTHONPATH=/opt/hermes  python /opt/hermes/plugins/bi-gate/probe.py
+HERMES_HOME=/data/profiles/cs  PYTHONPATH=/opt/hermes  python /opt/hermes/plugins/bi-gate/probe.py
 ```
+
+**注意别写成 `python -m plugins.bi_gate.probe`** —— 插件目录名是 `bi-gate`（带连字符），
+不是合法的 Python 包名，`-m` 那种写法会直接 `ModuleNotFoundError`。这条是本地实跑
+（2026-08-24）才发现的：单测全绿、容器里的验证脚本也全绿，因为它们都是用
+`importlib` 按文件路径加载的，唯独没人真的按文档写的命令敲一次。
+
+探针进程不需要预先加载插件：`hermes_cli.plugins.invoke_hook` 会在首次调用时自行完成
+插件发现与加载，所以这个独立进程走的正是真实加载路径 —— config.yaml 里漏配
+`plugins.enabled` 照样会被它抓出来（实测：启用的 profile 报 `alive` exit=0，
+没启用的报 `gate_down` exit=1）。
 
 这条尤其重要，因为第一节那个「漏配一行就没有门禁」的失效**只有探针能发现**——代码是对的、日志是干净的、测试是绿的，只有真的发一个必然被拦的调用才知道门禁在不在。
 

@@ -217,3 +217,56 @@ class TestFailureModes:
             "行为变了：hook 抛异常时调用没有被放行。若上游改成 fail-closed，"
             "这是好事，请更新本测试的断言。"
         )
+
+
+class TestAuditDoesNotContradictItself:
+    """审计日志不能对同一次调用既说"拦了"又说"放行了"。
+
+    本地实测（2026-08-24）发现：Hermes 在 ``pre_tool_call`` 拦下调用之后，
+    仍然会触发 ``post_tool_call``。post 钩子当时无条件记 ``gate_result: passed``，
+    于是每条拒绝都配一条"放行"，事后没法从日志里数出拒绝了多少次。
+    """
+
+    def test_blocked_call_emits_no_passed_line(self, gate, dispatch, caplog):
+        caplog.set_level("INFO")
+        blocked = {"metric": "revenue_v2", "time_window": GOOD["time_window"]}
+        result = dispatch("query_metric", blocked)
+        # 模拟 Hermes 拦截后仍然触发 post 钩子
+        gate._on_post_tool_call(tool_name="query_metric", args=blocked, result=result)
+
+        passed_lines = [r for r in caplog.records if "bi_gate_passed_call" in r.getMessage()]
+        assert passed_lines == [], f"被拦的调用不该记 passed：{[r.getMessage() for r in passed_lines]}"
+
+    def test_passed_call_still_emits_passed_line(self, gate, dispatch, caplog):
+        caplog.set_level("INFO")
+        result = dispatch("query_metric", dict(GOOD))
+        gate._on_post_tool_call(tool_name="query_metric", args=dict(GOOD), result=result)
+
+        passed_lines = [r for r in caplog.records if "bi_gate_passed_call" in r.getMessage()]
+        assert len(passed_lines) == 1, "真正执行了的调用必须留下 passed 记录"
+
+    def test_escaped_block_message_also_recognised(self, gate):
+        """结果里的中文若被转义成 \\uXXXX，仍要认得出是门禁拦的。"""
+        from importlib import import_module
+
+        rules = import_module(f"{gate.__name__}.rules")
+        escaped = json.dumps({"error": rules.GATE_SOURCE})  # ensure_ascii=True
+        assert gate._is_gate_block(escaped) is True
+        assert gate._is_gate_block(json.dumps({"rows": []})) is False
+
+
+class TestProbeRunsAsAStandaloneScript:
+    """探针要能作为独立进程跑起来 —— cron / 监控就是这么用的。
+
+    插件目录名是 ``bi-gate``（带连字符），不是合法 Python 包名，所以
+    ``python -m plugins.bi_gate.probe`` 跑不了；probe.py 必须在没有包上下文时
+    也能取到 ``GATE_SOURCE``。
+    """
+
+    def test_gate_source_resolves_without_package_context(self):
+        spec = importlib.util.spec_from_file_location("_probe_standalone", PLUGIN_DIR / "probe.py")
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules["_probe_standalone"] = mod
+        spec.loader.exec_module(mod)
+        assert mod.__package__ in (None, "", "_probe_standalone")
+        assert "门禁" in mod._gate_source()
