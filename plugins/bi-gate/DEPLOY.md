@@ -49,7 +49,35 @@ HERMES_HOME=/data/profiles/cs  PYTHONPATH=/opt/hermes  python /opt/hermes/plugin
 
 这条尤其重要，因为第一节那个「漏配一行就没有门禁」的失效**只有探针能发现**——代码是对的、日志是干净的、测试是绿的，只有真的发一个必然被拦的调用才知道门禁在不在。
 
-## 四、人格与授权是两个独立的东西
+## 四、上线时先跑一遍部署自检
+
+探针是给 cron 反复跑的，只回答"门禁此刻还在吗"。**新 profile 上线或排障时**，
+先跑一次 `verify.py`：它把整条链路拆成四段逐段报告，断在哪一段一眼能看出来。
+
+```bash
+HERMES_HOME=/data/profiles/bi \
+BI_GATE_REGISTRY=/data/profiles/bi/bi_registry.json \
+PYTHONPATH=/opt/hermes \
+python /opt/hermes/plugins/bi-gate/verify.py
+```
+
+四段是：① `plugins.enabled` 有没有被 Hermes 读到 ② 插件文件在不在
+③ 真实派发路径上非法调用有没有让工具体跑起来 ④ 探针能不能出结果。
+退出码 0 = 全通，1 = 有环节没通，2 = 脚本自身跑不起来。
+
+第 ③ 段是它比探针强的地方：**它会先注册一个会计数的假 `query_metric` 再打**。
+探针独立跑时这个工具本身并不存在，于是"门禁不在"和"工具不在"都表现为拦不住；
+`verify.py` 里工具确实存在，所以"调用被挡在工具体之前"这个结论是干净的。
+判据是工具体的执行计数，不是返回值长什么样。
+
+实测对照（本地，2026-08-24），两个 profile 唯一差别是 config.yaml 里那一行：
+
+| profile | ① 白名单 | ③ 四个非法调用 | ④ 探针 | 退出码 |
+|---|---|---|---|---|
+| 有 `enabled: [bi-gate]` | `{'bi-gate'}` | 全部拦下，工具体执行 0 次 | `alive` | 0 |
+| 没有那一行 | `None` | **全部放行，工具体各执行 1 次** | `gate_down` | 1 |
+
+## 五、人格与授权是两个独立的东西
 
 | 关注点 | 落在哪 |
 |---|---|
@@ -58,7 +86,7 @@ HERMES_HOME=/data/profiles/cs  PYTHONPATH=/opt/hermes  python /opt/hermes/plugin
 
 改 `SOUL.md` 不会动到工具权限，反之亦然。这跟《系统 B 技术方案》§8.1「人格和授权必须是两个独立字段」是一致的，不需要我们自己再拆一层。
 
-## 五、上云前要改的四处
+## 六、上云前要改的四处
 
 仓库自带的 `docker-compose.yml` 是给单机自用设计的，直接搬到云上有问题：
 
@@ -71,7 +99,7 @@ HERMES_HOME=/data/profiles/cs  PYTHONPATH=/opt/hermes  python /opt/hermes/plugin
 
 第 3、4 条是上游的安全默认值，是对的，**不要为了部署方便改掉**。
 
-## 六、指标注册表的位置
+## 七、指标注册表的位置
 
 注册表路径由 `BI_GATE_REGISTRY` 给出，建议放在 profile 自己的 home 里，跟着人格走：
 

@@ -44,20 +44,43 @@
 定期发一个必然被拦的调用，检查它真的被拦了：
 
 ```bash
-python -m plugins.bi_gate.probe
+PYTHONPATH=/path/to/hermes-agent python /path/to/hermes-agent/plugins/bi-gate/probe.py
 ```
+
+**别写成 `python -m plugins.bi_gate.probe`**：插件目录名是 `bi-gate`（带连字符），
+不是合法的 Python 包名，`-m` 会直接 `ModuleNotFoundError`。
 
 退出码：`0` 存活 / `1` **门禁失效，必须告警** / `2` 探针自身出错（环境问题，与门禁无关）。三者分开是为了让监控能区别处理——把环境故障当成安全事件会消耗对告警的信任。
 
 建议挂 cron，失效时才出声：
 
 ```cron
-*/10 * * * * cd /path/to/hermes-agent && python -m plugins.bi_gate.probe >/dev/null || <告警命令>
+*/10 * * * * cd /path/to/hermes-agent && HERMES_HOME=/data/profiles/bi PYTHONPATH=. python plugins/bi-gate/probe.py >/dev/null || <告警命令>
 ```
 
 探针**刻意不 import 插件的注册逻辑**，只驱动真实派发路径、观察结果。写在插件内部就成了循环论证：插件没加载时探针也不会跑，于是永远报"正常"。
 
 实测验证过两种状态：门禁挂载时 `alive`；把 hook 摘掉后探针返回 `gate_down`，且工具体确实被执行了 1 次——正是它要抓的那种静默失效。
+
+## 部署自检
+
+探针是给 cron 反复跑的。**新 profile 上线或排障时**先跑一次 `verify.py`，
+它把整条链路拆成四段逐段报告：① `plugins.enabled` 有没有被 Hermes 读到
+② 插件文件在不在 ③ 真实派发路径上非法调用有没有让工具体跑起来 ④ 探针能不能出结果。
+
+```bash
+HERMES_HOME=/data/profiles/bi \
+BI_GATE_REGISTRY=/data/profiles/bi/bi_registry.json \
+PYTHONPATH=/path/to/hermes-agent \
+python /path/to/hermes-agent/plugins/bi-gate/verify.py
+```
+
+它比探针强在第 ③ 段：**会先注册一个会计数的假 `query_metric` 再打**。
+探针独立跑时这个工具本身并不存在，"门禁不在"和"工具不在"都表现为拦不住；
+`verify.py` 里工具确实存在，所以"调用被挡在工具体之前"的结论是干净的。
+判据是工具体的执行计数，不是返回值长什么样。
+
+退出码 0 = 四段全通 / 1 = 有环节没通 / 2 = 脚本自身跑不起来。
 
 ## 配置
 
@@ -80,5 +103,10 @@ export BI_GATE_REGISTRY=/path/to/registry.json
 ## 测试
 
 ```bash
-pytest tests/plugins/test_bi_gate.py
+pytest tests/plugins/test_bi_gate.py tests/plugins/test_bi_gate_e2e.py tests/plugins/test_bi_gate_probe.py
 ```
+
+三个文件分工：`test_bi_gate.py` 验判定逻辑算得对，`test_bi_gate_e2e.py` 驱动真实
+`handle_function_call` 验拦得住（硬证据是工具体的执行计数），`test_bi_gate_probe.py`
+验探针本身。**但它们都是用 `importlib` 按文件路径加载插件的**，所以证明不了
+「按文档写的命令能不能跑起来」—— 那个只能靠 `verify.py` 和 `probe.py` 真的跑一次。
