@@ -24,6 +24,9 @@ REJECT_UNKNOWN_METRIC = "rejected_unknown_metric"
 REJECT_BAD_PARAM = "rejected_bad_param"
 REJECT_NO_TIME_WINDOW = "rejected_no_time_window"
 REJECT_SCAN = "rejected_scan"
+#: 动作级别超出该人格声明的 action_max。与"参数不合法"分开，是因为它是权限问题：
+#: 调用本身没写错，是这个人格没被授权做这么重的动作，处理方式也不同（找审批，不是改参数）。
+REJECT_ACTION_LEVEL = "rejected_action_level"
 #: 门禁自身出错。单列一类是为了运维能分开看：这类的量上升说明门禁坏了，
 #: 而不是调用方在乱调。它和其它拒因混在一起统计会互相淹没。
 REJECT_GATE_ERROR = "rejected_gate_error"
@@ -191,6 +194,203 @@ def check_scan_budget(estimated_rows: Optional[int], spec: MetricSpec) -> Verdic
 
 
 # ---------------------------------------------------------------------------
+# 动作分级（action_max 的 L0–L3）
+# ---------------------------------------------------------------------------
+#
+# 这一层回答的问题和前面几条不同。前面几条问"这个调用合不合法"，这一层问
+# "这个人格被授权做到多重的动作"。同一个 query_metric，查汇总和导明细的风险
+# 完全不是一回事，但工具名是同一个 —— 只按工具名授权在这里就不够用了。
+#
+# 分档标准由业务方与合规定，技术侧只提供形状：**输入是工具名 + 参数，输出是
+# 一个级别**，再和人格声明的 action_max 比。所以规则写在配置里（policy JSON），
+# 不写在代码里 —— 改分档不该要发版。
+#
+# 条件语言刻意做得很小。表达力再往上加一点就会变成"没有测试的代码"，而这份
+# 配置是合规要审的东西，看不懂就等于没审。
+
+#: 级别名与序号。只增不改 —— 审计表、告警、拒绝理由都引用它。
+LEVEL_NAMES = ("L0", "L1", "L2", "L3")
+
+#: 条件语言支持的全部算子。载入时会校验，出现表外算子直接判定策略不可用
+#: （而不是跳过那条规则）—— 静默跳过一条规则等于悄悄放宽授权。
+CONDITION_OPS = frozenset({
+    "param_present",        # [名字...]：这些参数出现即匹配
+    "param_absent",         # [名字...]：这些参数不出现即匹配
+    "param_equals",         # {名字: 值}
+    "param_in",             # {名字: [值...]}
+    "param_gte",            # {名字: 数}：数值型，>= 即匹配
+    "dimensions_count_gte", # 数：维度个数 >= N
+})
+
+
+def parse_level(value: Any) -> Optional[int]:
+    """把 "L2" / 2 解析成序号；无法解析返回 None。"""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int) and 0 <= value < len(LEVEL_NAMES):
+        return value
+    if isinstance(value, str):
+        v = value.strip().upper()
+        if v in LEVEL_NAMES:
+            return LEVEL_NAMES.index(v)
+    return None
+
+
+def level_name(level: int) -> str:
+    return LEVEL_NAMES[level] if 0 <= level < len(LEVEL_NAMES) else f"L?({level})"
+
+
+@dataclass(frozen=True)
+class ActionRule:
+    """一条分级规则：参数满足 ``when`` 时，这次调用至少是 ``level``。"""
+
+    level: int
+    when: Mapping[str, Any]
+    #: 给人看的说明，会进审计和拒绝理由。写清楚"为什么这算这一级"。
+    label: str = ""
+
+
+#: 判定不了。与 True/False 并列的第三种结果 —— 例如规则要求某参数是数字、
+#: 实际传了字符串。这种情况不能当成"不匹配"（那会把级别降下来），必须显式拒绝。
+UNDECIDABLE = object()
+
+
+def _match_one(op: str, spec: Any, args: Mapping[str, Any]) -> Any:
+    """单个算子。返回 True / False / :data:`UNDECIDABLE`。"""
+    if op == "param_present":
+        return all(name in args and args[name] is not None for name in spec)
+    if op == "param_absent":
+        return all(name not in args or args[name] is None for name in spec)
+    if op == "param_equals":
+        return all(args.get(name) == want for name, want in spec.items())
+    if op == "param_in":
+        return all(args.get(name) in tuple(want) for name, want in spec.items())
+    if op == "param_gte":
+        for name, want in spec.items():
+            got = args.get(name)
+            if got is None:
+                return False
+            if isinstance(got, bool) or not isinstance(got, (int, float)):
+                return UNDECIDABLE  # 该是数字却不是 —— 判定不了，不能当成不匹配
+            if got < want:
+                return False
+        return True
+    if op == "dimensions_count_gte":
+        dims = args.get("dimensions")
+        if dims is None:
+            return 0 >= spec
+        if isinstance(dims, str):
+            dims = [dims]
+        if not isinstance(dims, (list, tuple)):
+            return UNDECIDABLE
+        return len(dims) >= spec
+    return UNDECIDABLE  # 表外算子。载入时本该拦住，走到这里说明校验漏了。
+
+
+def _match(when: Mapping[str, Any], args: Mapping[str, Any]) -> Any:
+    """一条规则的全部条件（AND）。任一条判定不了，整条就判定不了。"""
+    undecidable = False
+    for op, spec in when.items():
+        got = _match_one(op, spec, args)
+        if got is UNDECIDABLE:
+            undecidable = True
+        elif not got:
+            return False          # 明确不匹配，优先于"判定不了"
+    return UNDECIDABLE if undecidable else True
+
+
+@dataclass(frozen=True)
+class ActionPolicy:
+    """一份动作分级策略。
+
+    :param rules: 分级规则。命中多条时取**最高**的级别 —— 就高不就低。
+    :param default_level: 一条都没命中时的级别。
+    :param human_review_from: 达到该级别一律走人工审批，无论 action_max 是多少。
+        对齐系统 B 方案 §7.2「L3（不可逆或涉资金）一律人审」。``None`` 表示不启用。
+        注意本层只负责**拦下并说明**，真正转给谁属于 Profile 的 fallback 字段。
+    :param unavailable: 策略载入失败。为真时一切调用都拒 —— 与注册表载入失败
+        同样的 fail-closed 方向：授权配置坏掉时应该停摆，不是放行。
+    """
+
+    rules: tuple = ()
+    default_level: int = len(LEVEL_NAMES) - 1
+    human_review_from: Optional[int] = None
+    unavailable: bool = False
+    #: 策略版本，只为审计留痕，回答"这次判定用的是哪一版分档"。
+    version: str = ""
+
+
+def classify_action(args: Mapping[str, Any], policy: ActionPolicy) -> Any:
+    """把一次调用归到一个级别。
+
+    :returns: ``(level, 命中说明)``；判定不了时返回 ``(None, 说明)``。
+    """
+    if policy.unavailable:
+        return None, "动作分级策略载入失败"
+
+    best: Optional[int] = None
+    best_label = ""
+    for rule in policy.rules:
+        got = _match(rule.when, args)
+        if got is UNDECIDABLE:
+            return None, f"规则 {rule.label or rule.when!r} 判定不了（参数类型与规则不符）"
+        if got and (best is None or rule.level > best):
+            best, best_label = rule.level, rule.label or repr(dict(rule.when))
+
+    if best is None:
+        return policy.default_level, "未命中任何规则，按默认级别"
+    return best, best_label
+
+
+def check_action_level(
+    args: Mapping[str, Any],
+    policy: ActionPolicy,
+    action_max: Optional[int],
+) -> Verdict:
+    """动作级别不得超过该人格声明的 action_max。
+
+    :param action_max: 人格声明的上限。``None`` 表示没声明 —— 按 L0 处理（最严），
+        不是"不限制"。没声明就当没授权，是这一层唯一安全的默认值。
+    """
+    level, why = classify_action(args, policy)
+    if level is None:
+        return _deny(
+            REJECT_ACTION_LEVEL,
+            f"无法判定这次调用的动作级别（{why}），按拦截处理。"
+            "这不是你的调用有问题，是授权策略配置有问题 —— 请联系值班。",
+            reason_detail=why,
+            policy_version=policy.version,
+        )
+
+    if policy.human_review_from is not None and level >= policy.human_review_from:
+        return _deny(
+            REJECT_ACTION_LEVEL,
+            f"这次调用被判定为 {level_name(level)}（{why}），"
+            f"{level_name(policy.human_review_from)} 及以上一律需要人工审批，不能由 agent 直接执行。",
+            action_level=level_name(level),
+            action_max=level_name(action_max) if action_max is not None else None,
+            needs_human_review=True,
+            policy_version=policy.version,
+        )
+
+    effective_max = 0 if action_max is None else action_max
+    if level > effective_max:
+        hint = "该人格未声明 action_max，按 L0 处理" if action_max is None else ""
+        return _deny(
+            REJECT_ACTION_LEVEL,
+            f"这次调用被判定为 {level_name(level)}（{why}），"
+            f"超出该人格的动作上限 {level_name(effective_max)}"
+            f"{'（' + hint + '）' if hint else ''}。"
+            "改参数没用 —— 要么换一个更轻的问法，要么走授权变更流程提升 action_max。",
+            action_level=level_name(level),
+            action_max=level_name(effective_max),
+            declared_action_max=level_name(action_max) if action_max is not None else None,
+            policy_version=policy.version,
+        )
+    return ALLOW
+
+
+# ---------------------------------------------------------------------------
 # 组合
 # ---------------------------------------------------------------------------
 
@@ -198,15 +398,24 @@ def evaluate(
     args: Mapping[str, Any],
     registry: MetricRegistry,
     estimated_rows: Optional[int] = None,
+    policy: Optional[ActionPolicy] = None,
+    action_max: Optional[int] = None,
 ) -> Verdict:
     """跑完整条门禁，返回第一条不通过的判定。
 
-    顺序是有意的：先确认指标存在（后面几条都依赖 spec），再校验参数，
-    最后才是代价最高的扫描量预检。
+    顺序是有意的：
+
+    1. 先确认指标存在 —— 后面几条都依赖 spec，而且"指标不存在"是最可操作的报错；
+    2. 再判动作级别 —— 这是**权限**问题，比参数格式问题更该优先告诉调用方，
+       因为处理方式不同：参数错了改参数，越权了改参数没用，得走审批；
+    3. 然后校验参数；
+    4. 最后才是代价最高的扫描量预检。
 
     :param args: query_metric 的调用参数。
     :param registry: 当前生效的指标注册表。
     :param estimated_rows: EXPLAIN 预估行数，没有则传 None。
+    :param policy: 动作分级策略。``None`` 表示这一层未启用（不判级别，直接跳过）。
+    :param action_max: 该人格声明的动作上限序号。``None`` 且 policy 启用时按 L0 处理。
     :returns: 放行为 ``ALLOW``，否则是带拒因与理由的 :class:`Verdict`。
     """
     metric = args.get("metric")
@@ -216,6 +425,11 @@ def evaluate(
 
     spec = registry.get(metric)
     assert spec is not None  # check_metric_registered 已经保证
+
+    if policy is not None:
+        verdict = check_action_level(args, policy, action_max)
+        if verdict.blocked:
+            return verdict
 
     for verdict in (
         check_dimensions(args.get("dimensions"), spec),

@@ -31,13 +31,19 @@ import os
 from typing import Any, Dict, Mapping, Optional
 
 from .rules import (
+    CONDITION_OPS,
     GATE_SOURCE,
     PASSED,
     REJECT_GATE_ERROR,
+    ActionPolicy,
+    ActionRule,
     MetricRegistry,
     MetricSpec,
     Verdict,
+    classify_action,
     evaluate,
+    level_name,
+    parse_level,
 )
 
 logger = logging.getLogger(__name__)
@@ -48,6 +54,14 @@ GATED_TOOL = "query_metric"
 #: 注册表来源。留成环境变量是因为首批指标还在对齐口径，落地前会反复改；
 #: 指标层稳定后应改为从指标服务拉取并带版本号。
 REGISTRY_PATH_ENV = "BI_GATE_REGISTRY"
+
+#: 动作分级策略（L0–L3 怎么分档）。分档标准由业务方与合规定，所以放配置不放代码 ——
+#: 改分档不该要发版。未设置时这一层不启用。
+ACTION_POLICY_ENV = "BI_GATE_ACTION_POLICY"
+
+#: 该人格声明的动作上限，取值 L0–L3。属于 Profile 的字段 ③，跟着人格走。
+#: 未声明按 L0 处理（最严），不是"不限制"。
+ACTION_MAX_ENV = "BI_GATE_ACTION_MAX"
 
 
 # ---------------------------------------------------------------------------
@@ -108,10 +122,136 @@ def reload_registry() -> MetricRegistry:
 
 
 # ---------------------------------------------------------------------------
+# 动作分级策略加载
+# ---------------------------------------------------------------------------
+
+def _parse_policy(raw: Mapping[str, Any]) -> ActionPolicy:
+    """把 policy JSON 解析成 :class:`ActionPolicy`。
+
+    任何一处不合法都抛异常，由调用方转成 ``unavailable=True``（全拒）。
+    **不做"跳过坏规则、其余照用"** —— 一条规则被静默跳过，就是一档授权被
+    静默放宽，而这正是最难在事后发现的那类问题。
+    """
+    rules = []
+    for item in raw.get("rules", []):
+        level = parse_level(item.get("level"))
+        if level is None:
+            raise ValueError(f"规则的 level 非法：{item.get('level')!r}，应为 L0–L3")
+        when = item.get("when")
+        if not isinstance(when, Mapping) or not when:
+            raise ValueError(f"规则缺少 when 或 when 为空：{item!r}")
+        unknown_ops = set(when) - CONDITION_OPS
+        if unknown_ops:
+            raise ValueError(
+                f"规则用了不支持的条件算子 {sorted(unknown_ops)}；"
+                f"支持的是 {sorted(CONDITION_OPS)}"
+            )
+        rules.append(ActionRule(level=level, when=dict(when), label=str(item.get("label", ""))))
+
+    default_level = parse_level(raw.get("default_level", "L0"))
+    if default_level is None:
+        raise ValueError(f"default_level 非法：{raw.get('default_level')!r}")
+
+    hrf = raw.get("human_review_from")
+    human_review_from = None
+    if hrf is not None:
+        human_review_from = parse_level(hrf)
+        if human_review_from is None:
+            raise ValueError(f"human_review_from 非法：{hrf!r}")
+
+    return ActionPolicy(
+        rules=tuple(rules),
+        default_level=default_level,
+        human_review_from=human_review_from,
+        version=str(raw.get("version", "")),
+    )
+
+
+def _load_policy() -> Optional[ActionPolicy]:
+    """载入动作分级策略。
+
+    * 未设置 ``BI_GATE_ACTION_POLICY`` —— 返回 ``None``，这一层不启用。
+      分档标准要业务方与合规一起定，没定之前不该由技术侧塞一套默认值进去
+      假装有授权控制；其余几条规则照常生效。
+    * 设置了但载入失败 —— 返回 ``unavailable`` 策略，**所有调用都拒**。
+      声明了要管却管不了，只能停摆，不能放行。
+    """
+    path = os.environ.get(ACTION_POLICY_ENV)
+    if not path:
+        logger.info("bi-gate: 未设置 %s，动作分级未启用（其余门禁规则不受影响）", ACTION_POLICY_ENV)
+        return None
+    try:
+        with open(path, encoding="utf-8") as fh:
+            raw = json.load(fh)
+        policy = _parse_policy(raw)
+    except (OSError, ValueError, TypeError, AttributeError) as exc:
+        logger.error("bi-gate: 载入动作分级策略 %s 失败（%s），所有调用将被拒", path, exc)
+        return ActionPolicy(unavailable=True, version="<载入失败>")
+    logger.info(
+        "bi-gate: 载入动作分级策略 version=%s，%d 条规则，默认 %s，人审起点 %s",
+        policy.version or "(未标版本)", len(policy.rules), level_name(policy.default_level),
+        level_name(policy.human_review_from) if policy.human_review_from is not None else "未启用",
+    )
+    return policy
+
+
+def _load_action_max() -> Optional[int]:
+    """读该人格声明的动作上限。
+
+    读不到或写错都返回 ``None``；``check_action_level`` 会把 ``None`` 当 L0 处理
+    （最严），而不是"不限制" —— 没声明就当没授权。
+    """
+    raw = os.environ.get(ACTION_MAX_ENV)
+    if raw is None:
+        return None
+    level = parse_level(raw)
+    if level is None:
+        logger.error("bi-gate: %s=%r 不是合法级别（L0–L3），按未声明处理（即 L0）", ACTION_MAX_ENV, raw)
+        return None
+    return level
+
+
+_policy: Optional[ActionPolicy] = None
+_policy_loaded = False
+_action_max: Optional[int] = None
+_action_max_loaded = False
+
+
+def _policy_now() -> Optional[ActionPolicy]:
+    global _policy, _policy_loaded
+    if not _policy_loaded:
+        _policy = _load_policy()
+        _policy_loaded = True
+    return _policy
+
+
+def _action_max_now() -> Optional[int]:
+    global _action_max, _action_max_loaded
+    if not _action_max_loaded:
+        _action_max = _load_action_max()
+        _action_max_loaded = True
+    return _action_max
+
+
+def reload_policy():
+    """强制重载分级策略与 action_max。改完授权后调用，避免重启进程。"""
+    global _policy, _policy_loaded, _action_max, _action_max_loaded
+    _policy_loaded = False
+    _action_max_loaded = False
+    return _policy_now(), _action_max_now()
+
+
+# ---------------------------------------------------------------------------
 # 审计
 # ---------------------------------------------------------------------------
 
-def _audit(verdict: Verdict, args: Mapping[str, Any], **context: Any) -> None:
+def _audit(
+    verdict: Verdict,
+    args: Mapping[str, Any],
+    action_level: Optional[str] = None,
+    action_max: Optional[str] = None,
+    **context: Any,
+) -> None:
     """记录一次判定。
 
     当前只写结构化日志。接 ai_cs.agent_audit 时替换这里的实现即可 ——
@@ -124,6 +264,10 @@ def _audit(verdict: Verdict, args: Mapping[str, Any], **context: Any) -> None:
         "metric": args.get("metric"),
         "dimensions": args.get("dimensions"),
         "time_window": args.get("time_window"),
+        # 动作级别对放行的调用同样要记 —— 事后要能回答"这个人格实际都做到了几级"，
+        # 而不是只能看到被拦的那些。只记拒绝等于只看得见失败的越权尝试。
+        "action_level": action_level,
+        "action_max": action_max,
         "detail": dict(verdict.detail) if verdict.detail else None,
         **{k: v for k, v in context.items() if v},
     }
@@ -159,12 +303,23 @@ def _on_pre_tool_call(
         if not isinstance(args, Mapping):
             args = {}
 
+        policy = _policy_now()
+        action_max = _action_max_now()
+
         # EXPLAIN 预估行数由执行层在派发前填进来；当前阶段还没接，先传 None
         # （check_scan_budget 会放行并留给执行层记录）。
-        verdict = evaluate(args, _registry_now(), estimated_rows=None)
+        verdict = evaluate(
+            args,
+            _registry_now(),
+            estimated_rows=None,
+            policy=policy,
+            action_max=action_max,
+        )
         _audit(
             verdict,
             args,
+            action_level=_describe_level(args, policy),
+            action_max=level_name(action_max) if action_max is not None else None,
             session_id=context.get("session_id"),
             task_id=context.get("task_id"),
             tool_call_id=context.get("tool_call_id"),
@@ -174,6 +329,20 @@ def _on_pre_tool_call(
         return {"action": "block", "message": verdict.reason or "BI 门禁拦截。"}
     except Exception:
         return _gate_error_block(args, context)
+
+
+def _describe_level(args: Mapping[str, Any], policy: Optional[ActionPolicy]) -> Optional[str]:
+    """给审计用的动作级别字符串。分级未启用返回 None，判定不了返回 "undecidable"。
+
+    它自己吞掉异常：审计取不到级别是小事，把主链路带崩是大事。
+    """
+    if policy is None:
+        return None
+    try:
+        level, _why = classify_action(args, policy)
+    except Exception:  # pragma: no cover - 审计取值不能反过来打断业务
+        return "error"
+    return level_name(level) if level is not None else "undecidable"
 
 
 def _gate_error_block(args: Any, context: Mapping[str, Any]) -> Dict[str, str]:

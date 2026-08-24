@@ -57,13 +57,15 @@ HERMES_HOME=/data/profiles/cs  PYTHONPATH=/opt/hermes  python /opt/hermes/plugin
 ```bash
 HERMES_HOME=/data/profiles/bi \
 BI_GATE_REGISTRY=/data/profiles/bi/bi_registry.json \
+BI_GATE_ACTION_POLICY=/data/profiles/bi/action_policy.json \
+BI_GATE_ACTION_MAX=L1 \
 PYTHONPATH=/opt/hermes \
 python /opt/hermes/plugins/bi-gate/verify.py
 ```
 
-四段是：① `plugins.enabled` 有没有被 Hermes 读到 ② 插件文件在不在
-③ 真实派发路径上非法调用有没有让工具体跑起来 ④ 探针能不能出结果。
-退出码 0 = 全通，1 = 有环节没通，2 = 脚本自身跑不起来。
+五段是：① `plugins.enabled` 有没有被 Hermes 读到 ② 插件文件在不在
+③ 真实派发路径上非法调用有没有让工具体跑起来 ④ 动作分级判得对不对、留痕有没有记上
+⑤ 探针能不能出结果。退出码 0 = 全通，1 = 有环节没通，2 = 脚本自身跑不起来。
 
 第 ③ 段是它比探针强的地方：**它会先注册一个会计数的假 `query_metric` 再打**。
 探针独立跑时这个工具本身并不存在，于是"门禁不在"和"工具不在"都表现为拦不住；
@@ -99,12 +101,37 @@ python /opt/hermes/plugins/bi-gate/verify.py
 
 第 3、4 条是上游的安全默认值，是对的，**不要为了部署方便改掉**。
 
-## 七、指标注册表的位置
+## 七、跟着人格走的三份配置
 
-注册表路径由 `BI_GATE_REGISTRY` 给出，建议放在 profile 自己的 home 里，跟着人格走：
+三份都建议放在 profile 自己的 home 里，跟着人格走、随卷挂载：
 
 ```bash
-BI_GATE_REGISTRY=$HERMES_HOME/bi_registry.json
+BI_GATE_REGISTRY=$HERMES_HOME/bi_registry.json        # ② facts：这个人格能查哪些指标
+BI_GATE_ACTION_POLICY=$HERMES_HOME/action_policy.json # ③ 的一半：L0–L3 怎么分档
+BI_GATE_ACTION_MAX=L1                                 # ③ 的另一半：这个人格的动作上限
 ```
 
-载入失败按空表处理，即全部拦截（fail-closed）。所以容器启动时挂载卷失败会表现为"所有查询都被拒"，而不是"门禁消失"——这个方向是安全的。
+对应《人格门禁设计方案》里 Profile 的字段 ② 和 ③。**审批人不同**：注册表由事实层责任人批，
+`action_policy` 和 `action_max` 是技术负责人 + 合规双签，等同权限变更。所以它们是三个独立文件，
+不合成一份——合在一起就没法分开审批了。
+
+各自坏掉时的方向：
+
+| 配置 | 没设 | 载入失败 |
+|---|---|---|
+| `BI_GATE_REGISTRY` | 空表，**所有查询被拒** | 同左（fail-closed） |
+| `BI_GATE_ACTION_POLICY` | 分级不启用，其余规则照常 | **所有查询被拒**（fail-closed） |
+| `BI_GATE_ACTION_MAX` | 按 **L0** 处理（最严），不是"不限制" | 写错级别名同左 |
+
+注册表和策略载入失败都表现为"所有查询都被拒"，而不是"门禁消失"——这个方向是安全的。
+所以容器启动挂载卷失败时，现象是业务停摆，不是悄悄放行。
+
+**`BI_GATE_ACTION_POLICY` 没设和设了但坏掉，含义完全不同**：前者是"分档标准还没定"（正常状态，
+业务方与合规还在对），后者是"声明了要管却管不了"（故障）。别把两者写成同一种处理。
+
+### 探针看不见过度拦截
+
+存活探针只回答"门禁还拦得住吗"，它发不了"门禁拦过头了"。策略配坏时探针照样报 `alive`
+（canary 本来就该被拦），但此刻所有正常查询也在被拒。**过度拦截靠业务侧发现，不靠探针**——
+方向上这是可接受的（业务停摆看得见，静默放行看不见），但值班要知道这个盲区。
+部署自检 `verify.py` 会抓到，因为它里面有一条本该放行的调用。

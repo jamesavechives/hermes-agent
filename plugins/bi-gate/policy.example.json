@@ -1,0 +1,62 @@
+{
+  "_comment": [
+    "动作分级策略示例 —— 这是形状，不是决定。",
+    "L0-L3 具体怎么分档必须由业务方与合规一起定，技术侧只提供机制：",
+    "输入是工具名 + 参数，输出是一个级别，再和人格声明的 action_max 比。",
+    "",
+    "下面这套分档来自《人格门禁设计方案》第八节第二条的建议（汇总 L0 / 明细 L1 / 导出 L2），",
+    "尚未拍板，落地前必须替换成业务方与合规签过字的版本。",
+    "",
+    "注意：when 里的参数名必须和 query_metric 的真实入参对得上。",
+    "这里用的 granularity / export / destination / limit 是按当前工具 schema 写的，",
+    "工具改参数名时这份策略要一起改 —— 参数名对不上会让规则永远不命中，",
+    "表现为授权被静默放宽，不会有任何报错。"
+  ],
+  "version": "example-0",
+
+  "default_level": "L0",
+
+  "_comment_default": [
+    "一条规则都没命中时的级别。设成 L0 表示'默认最轻'，靠下面的规则往上抬。",
+    "如果某天工具新增了危险参数而没人补规则，它会被判成 L0 放行 —— 这是本设计的已知弱点。",
+    "更保守的做法是 default_level 设成 L3、用规则显式把安全的调用降到 L0，",
+    "代价是任何新参数组合都会先被拦下。哪种更合适由业务方定。"
+  ],
+
+  "human_review_from": null,
+
+  "_comment_human_review": [
+    "达到该级别一律走人工审批，无论 action_max 是多少。对齐系统 B 方案 §7.2：",
+    "L3（不可逆或涉资金）一律人审。BI 场景没有 L3，所以这里是 null（不启用）；",
+    "客服人格的策略应设成 \"L3\"。",
+    "本层只负责拦下并说明，真正转给谁属于 Profile 的 fallback 字段。"
+  ],
+
+  "rules": [
+    {
+      "level": "L1",
+      "label": "明细查询（按行返回，可能含个体数据）",
+      "when": { "param_equals": { "granularity": "row" } }
+    },
+    {
+      "level": "L1",
+      "label": "大结果集拉取（limit >= 10000）",
+      "when": { "param_gte": { "limit": 10000 } }
+    },
+    {
+      "level": "L1",
+      "label": "高基数拆分（维度 >= 4 个）",
+      "when": { "dimensions_count_gte": 4 }
+    },
+    {
+      "level": "L2",
+      "label": "导出到受控环境之外",
+      "when": { "param_equals": { "export": true } }
+    },
+    {
+      "level": "L2",
+      "label": "指定了外部投递目标",
+      "when": { "param_present": ["destination"] }
+    }
+  ]
+}

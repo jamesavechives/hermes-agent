@@ -4,25 +4,28 @@
 ----------------
 :mod:`probe` 只回答一个问题（门禁此刻还在吗），设计成能被 cron 反复跑、
 输出一行 JSON、只看退出码。本脚本是**部署时跑一次**的自检：把整条链路
-拆成四段逐段报告，方便新环境上线或排障时定位是哪一段断了。
+拆成五段逐段报告，方便新环境上线或排障时定位是哪一段断了。
 
-四段分别是：
+五段分别是：
 
 1. ``config.yaml`` 里的 ``plugins.enabled`` 有没有被 Hermes 读到 ——
    插件是 opt-in 的，漏这一行门禁完全不存在且没有任何报错；
 2. 插件文件在不在应该在的目录里；
 3. 真实派发路径上，非法调用是不是真的没让工具体跑起来 ——
    硬证据是工具体的执行计数，不是返回值长什么样；
-4. 存活探针能不能正常出结果。
+4. 动作分级（L0–L3）判得对不对，越出 action_max 的调用有没有被拦；
+5. 存活探针能不能正常出结果。
 
 用法
 ----
     HERMES_HOME=/data/profiles/bi \\
     BI_GATE_REGISTRY=/data/profiles/bi/bi_registry.json \\
+    BI_GATE_ACTION_POLICY=/data/profiles/bi/action_policy.json \\
+    BI_GATE_ACTION_MAX=L1 \\
     PYTHONPATH=/opt/hermes \\
     python /opt/hermes/plugins/bi-gate/verify.py
 
-退出码 0 = 四段全通；1 = 有环节没通；2 = 脚本自身跑不起来。
+退出码 0 = 五段全通；1 = 有环节没通；2 = 脚本自身跑不起来。
 
 仓库根目录默认按本文件位置往上推两级；装在别处时用 ``HERMES_REPO`` 覆盖。
 
@@ -37,6 +40,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import logging
 import os
 import sys
 import types
@@ -61,6 +65,17 @@ CASES = [
         "time_window": {"start": "2026-08-01", "end": "2026-08-21"}}, False),
 ]
 
+#: 动作分级用例。只在 profile 配了 BI_GATE_ACTION_POLICY 时跑；
+#: 第三项的期望取决于该人格声明的 action_max，所以由运行时算，不写死。
+ACTION_CASES = [
+    ("汇总查询（应判 L0）", {"metric": "dau", "dimensions": ["market"],
+        "time_window": {"start": "2026-08-01", "end": "2026-08-21"}}),
+    ("明细查询（应判 L1）", {"metric": "dau", "granularity": "row",
+        "time_window": {"start": "2026-08-01", "end": "2026-08-21"}}),
+    ("导出（应判 L2）", {"metric": "dau", "export": True,
+        "time_window": {"start": "2026-08-01", "end": "2026-08-21"}}),
+]
+
 
 def _load_from_path(name: str, path: Path, package: str = "", is_package: bool = False):
     """按文件路径加载模块。
@@ -82,6 +97,31 @@ def _load_from_path(name: str, path: Path, package: str = "", is_package: bool =
     sys.modules[name] = module
     spec.loader.exec_module(module)
     return module
+
+
+class _AuditCollector(logging.Handler):
+    """把 bi-gate 写出的判定记录收下来，用于验证"留痕"这一半。
+
+    拦得住和记得对是两件事。2026-08-24 实测过一次：调用确实被拦了，
+    但审计里同时留下一条"放行"，事后没法从日志里数出拒绝了多少次。
+    所以自检不能只看拦没拦，还要看记录对不对。
+    """
+
+    def __init__(self) -> None:
+        super().__init__(level=logging.INFO)
+        self.records: list = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            msg = record.getMessage()
+        except Exception:
+            return
+        if "bi_gate_verdict" not in msg:
+            return
+        try:
+            self.records.append(json.loads(msg.split("bi-gate verdict ", 1)[1]))
+        except (IndexError, ValueError):
+            pass
 
 
 def main() -> int:
@@ -175,16 +215,63 @@ def main() -> int:
         print(f"   [{'✓' if hit else '✗'}] {label:<22} "
               f"{'拦下' if blocked else '放行'}（工具体执行 {executed} 次）{note}")
 
-    # ── ④ 存活探针 ────────────────────────────────────────────────
+    # ── ④ 动作分级（action_max）────────────────────────────────────
+    policy = gate._policy_now()
+    action_max = gate._action_max_now()
+    if policy is None:
+        print("\n④ 动作分级：未启用（该 profile 没设 BI_GATE_ACTION_POLICY）")
+        print("   分档标准要业务方与合规定，没定之前不启用是对的；其余门禁规则不受影响。")
+        ok_action = True
+    elif policy.unavailable:
+        print("\n④ 动作分级：策略载入失败，所有调用都会被拒（fail-closed）")
+        ok_action = False
+    else:
+        max_txt = gate.level_name(action_max) if action_max is not None else "未声明（按 L0）"
+        print(f"\n④ 动作分级：策略 version={policy.version or '(未标版本)'}，"
+              f"{len(policy.rules)} 条规则，该人格 action_max={max_txt}")
+        ok_action = True
+        effective_max = 0 if action_max is None else action_max
+        audit = _AuditCollector()
+        gate_logger = logging.getLogger(gate.__name__)
+        gate_logger.addHandler(audit)
+        gate_logger.setLevel(logging.INFO)
+        for label, args in ACTION_CASES:
+            before = len(_CALLS)
+            result = model_tools.handle_function_call("query_metric", args)
+            executed = len(_CALLS) - before
+            level, why = gate.classify_action(args, policy)
+            lv = gate.level_name(level) if level is not None else "判定不了"
+            should_block = level is None or level > effective_max
+            hit = (executed == 0) == should_block
+            ok_action = ok_action and hit
+            print(f"   [{'✓' if hit else '✗'}] {label:<20} 判为 {lv:<4} "
+                  f"{'拦下' if executed == 0 else '放行'}（工具体执行 {executed} 次）· {why}")
+        gate_logger.removeHandler(audit)
+
+        # 留痕：每次调用都该留下恰好一条判定记录，且带级别。
+        # "拦得住"和"记得对"是两件事，这里验后一半。
+        got = len(audit.records)
+        want = len(ACTION_CASES)
+        with_level = [r for r in audit.records if r.get("action_level")]
+        contradictory = [r for r in audit.records
+                         if r.get("gate_result") == "passed" and r.get("action_level") is None]
+        ok_audit = got == want and len(with_level) == want and not contradictory
+        ok_action = ok_action and ok_audit
+        print(f"   [{'✓' if ok_audit else '✗'}] 留痕：{got}/{want} 条判定记录，"
+              f"其中 {len(with_level)} 条带动作级别")
+        if not ok_audit:
+            print(f"      记录内容：{audit.records!r}")
+
+    # ── ⑤ 存活探针 ────────────────────────────────────────────────
     probe = _load_from_path(
         "hermes_plugins.bi_gate.probe", plugin_dir / "probe.py",
         package="hermes_plugins.bi_gate",
     )
     result = probe.probe()
-    print(f"\n④ 存活探针: {result.status} (exit={result.exit_code})")
+    print(f"\n⑤ 存活探针: {result.status} (exit={result.exit_code})")
     ok4 = result.status == probe.ALIVE
 
-    allok = ok1 and ok2 and ok3 and ok4
+    allok = ok1 and ok2 and ok3 and ok_action and ok4
     print("\n结论：" + ("这个 profile 的门禁生效 ✓" if allok else "有环节未通 ✗"))
     return 0 if allok else 1
 
