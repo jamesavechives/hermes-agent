@@ -10,6 +10,8 @@ act/
 .act-sandbox-agent.*
 .venv/
 .venv
+# 本地跑 bi-gate 门禁验证用的最小 venv（只装 pytest + pyyaml）
+.venv-bigate/
 .vscode/
 .env
 .op.env
