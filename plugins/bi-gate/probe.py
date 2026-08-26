@@ -22,7 +22,7 @@
 插件目录名带连字符（``bi-gate``），不是合法的 Python 包名，所以 ``python -m`` 那种
 写法跑不起来 —— 直接执行脚本文件即可。执行时需要仓库根目录在 ``PYTHONPATH`` 上，
 探针才导得到 ``model_tools``；``invoke_hook`` 会自行完成插件发现与加载，因此这个
-独立进程走的正是真实的加载路径，config.yaml 里漏配 ``plugins.enabled`` 一样会被它抓到。
+独立进程走的正是真实的加载路径，config.yaml 里没显式声明 ``plugins.enabled`` 一样会被它抓到。
 
 退出码给 cron / 监控用。1 必须告警：它意味着此刻任何 query_metric 都能穿过去。
 """
