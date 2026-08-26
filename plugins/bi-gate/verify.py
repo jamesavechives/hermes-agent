@@ -52,29 +52,62 @@ sys.path.insert(0, str(REPO))
 #: 假 query_metric 的执行次数。工具体跑了才加一 —— 这是"有没有被真正拦住"的唯一硬证据。
 _CALLS: list = []
 
-#: (说明, 参数, 是否应当被拦)
-CASES = [
-    ("未注册指标 revenue_v2", {"metric": "revenue_v2",
-        "time_window": {"start": "2026-08-01", "end": "2026-08-21"}}, True),
-    ("已注册但没时间窗 dau", {"metric": "dau"}, True),
-    ("已注册但维度非法 dau", {"metric": "dau", "dimensions": ["uid"],
-        "time_window": {"start": "2026-08-01", "end": "2026-08-21"}}, True),
-    ("相对时间窗 last_7d", {"metric": "dau",
-        "time_window": {"start": "last_7d", "end": "now"}}, True),
-    ("合法调用 dau", {"metric": "dau", "dimensions": ["market"],
-        "time_window": {"start": "2026-08-01", "end": "2026-08-21"}}, False),
-]
+#: 固定的绝对时间窗，所有用例共用。
+_WINDOW = {"start": "2026-08-01", "end": "2026-08-21"}
 
-#: 动作分级用例。只在 profile 配了 BI_GATE_ACTION_POLICY 时跑；
-#: 第三项的期望取决于该人格声明的 action_max，所以由运行时算，不写死。
-ACTION_CASES = [
-    ("汇总查询（应判 L0）", {"metric": "dau", "dimensions": ["market"],
-        "time_window": {"start": "2026-08-01", "end": "2026-08-21"}}),
-    ("明细查询（应判 L1）", {"metric": "dau", "granularity": "row",
-        "time_window": {"start": "2026-08-01", "end": "2026-08-21"}}),
-    ("导出（应判 L2）", {"metric": "dau", "export": True,
-        "time_window": {"start": "2026-08-01", "end": "2026-08-21"}}),
-]
+
+def build_cases(registry):
+    """按**当前 profile 实际注册的指标**生成用例，不假设指标叫什么。
+
+    早先这里把探测指标硬编码成 ``dau``，而 ``registry.example.json`` 注册的是
+    ``daily_active_users`` —— 照着 DEPLOY.md 用样例表建 profile 再跑自检，
+    会看到「合法调用被拦」的红色结论，但门禁其实是对的：那个指标本来就没注册，
+    拦下来才是正确行为。自检脚本要检的是「这个 profile 的链路通不通」，
+    所以正例必须从它自己的注册表里取。（2026-08-26 在 dev 机上首次部署时发现）
+
+    返回 (CASES, ACTION_CASES, probe_name)；注册表为空时 probe_name 为 None，
+    只跑得了否定用例。
+    """
+    probe = None
+    for name in registry.names:
+        spec = registry.get(name)
+        if spec and spec.requires_time_window and spec.dimensions:
+            probe = (name, sorted(spec.dimensions)[0])
+            break
+    if probe is None:
+        for name in registry.names:
+            spec = registry.get(name)
+            if spec:
+                probe = (name, sorted(spec.dimensions)[0] if spec.dimensions else None)
+                break
+
+    cases = [
+        ("未注册指标 revenue_v2", {"metric": "revenue_v2", "time_window": _WINDOW}, True),
+    ]
+    if probe is None:
+        return cases, [], None
+
+    m, dim = probe
+    spec = registry.get(m)
+    bad_dim = "__no_such_dim__"
+    if spec and spec.requires_time_window:
+        cases.append((f"已注册但没时间窗 {m}", {"metric": m}, True))
+    cases.append((f"已注册但维度非法 {m}",
+                  {"metric": m, "dimensions": [bad_dim], "time_window": _WINDOW}, True))
+    cases.append((f"相对时间窗 last_7d",
+                  {"metric": m, "time_window": {"start": "last_7d", "end": "now"}},
+                  bool(spec and spec.requires_time_window)))
+    legit = {"metric": m, "time_window": _WINDOW}
+    if dim:
+        legit["dimensions"] = [dim]
+    cases.append((f"合法调用 {m}", legit, False))
+
+    action_cases = [
+        (f"汇总查询（应判 L0）", dict(legit)),
+        (f"明细查询（应判 L1）", {"metric": m, "granularity": "row", "time_window": _WINDOW}),
+        (f"导出（应判 L2）", {"metric": m, "export": True, "time_window": _WINDOW}),
+    ]
+    return cases, action_cases, m
 
 
 def _load_from_path(name: str, path: Path, package: str = "", is_package: bool = False):
@@ -168,7 +201,13 @@ def main() -> int:
         package="hermes_plugins.bi_gate", is_package=True,
     )
     gate.reload_registry()
-    print(f"   载入的指标注册表: {gate._registry_now().names}")
+    _reg = gate._registry_now()
+    print(f"   载入的指标注册表: {_reg.names}")
+    CASES, ACTION_CASES, _probe_metric = build_cases(_reg)
+    if _probe_metric is None:
+        print("   ⚠ 注册表为空 —— 只能跑否定用例，正例与动作分级跳过")
+    else:
+        print(f"   自检探测指标: {_probe_metric}（从该 profile 的注册表里选的）")
 
     from hermes_cli import plugins as plugins_mod
     from tools import registry as tool_registry
