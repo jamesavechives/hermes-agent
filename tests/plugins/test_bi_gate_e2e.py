@@ -63,6 +63,9 @@ def gate(tmp_path, monkeypatch):
         encoding="utf-8",
     )
     monkeypatch.setenv("BI_GATE_REGISTRY", str(registry))
+    # 人格声明的工具白名单（字段 ③）。不声明的话门禁按最严处理、拦一切，
+    # 所以每个用例都必须显式声明——这本身就是被测行为的一部分。
+    monkeypatch.setenv("BI_GATE_TOOLS", "query_metric")
     plugin = _load_plugin()
     plugin.reload_registry()
     return plugin
@@ -152,16 +155,57 @@ class TestAllowedCallsGoThrough:
         assert len(_CALLS) == 1, "合法调用没能到达工具体"
         assert "12345" in str(result)
 
-    def test_other_tools_are_untouched(self, dispatch, monkeypatch):
-        """门禁只管 query_metric，别的工具一律不碰。"""
+    def test_tool_outside_the_whitelist_never_runs(self, dispatch, monkeypatch):
+        """白名单之外的工具，工具体一次都不许跑。
+
+        这条替换了原来的 ``test_other_tools_are_untouched``——那条断言的是
+        「门禁只管 query_metric，别的工具一律不碰」，而 2026-08-26 的实测
+        证明那个行为就是漏洞本身：模型被拦下 export 之后，转手用文件工具把
+        同样的数据写到了磁盘，审计里一条记录都没有。
+
+        工具白名单必须由门禁在派发路径上自己比对，不能交给 Hermes 的
+        toolsets 配置——那只决定模型看得到什么，不决定能执行什么。
+        """
         from tools import registry as tool_registry
 
         seen = []
         _register_tool(
             tool_registry, "bi_gate_probe_tool", lambda args, **_kw: seen.append(args) or "ok"
         )
+        result = dispatch("bi_gate_probe_tool", {"path": "/tmp/x"})
+        assert len(seen) == 0, "白名单外的工具体执行了 —— 这就是那次绕过"
+        assert "bi_gate_probe_tool" in json.dumps(result, ensure_ascii=False, default=str)
+
+    def test_whitelisted_non_metric_tool_passes_through(self, dispatch, monkeypatch):
+        """白名单内、但不是 query_metric 的工具，门禁不做指标判定，直接放行。"""
+        from tools import registry as tool_registry
+
+        monkeypatch.setenv("BI_GATE_TOOLS", "query_metric,bi_gate_probe_tool")
+        seen = []
+        _register_tool(
+            tool_registry, "bi_gate_probe_tool", lambda args, **_kw: seen.append(args) or "ok"
+        )
         dispatch("bi_gate_probe_tool", {"path": "/tmp/x"})
         assert len(seen) == 1
+
+    def test_empty_whitelist_blocks_everything(self, dispatch, monkeypatch):
+        """没声明白名单 = 空白名单 = 拦一切。
+
+        与 action_max 未声明按 L0 是同一条原则：漏声明的后果应该是做不了事。
+        反过来（未声明就不限制）会让「忘了配」和「配成全开」在行为上无法区分。
+        """
+        from tools import registry as tool_registry
+
+        monkeypatch.delenv("BI_GATE_TOOLS", raising=False)
+        seen = []
+        _register_tool(
+            tool_registry, "bi_gate_probe_tool", lambda args, **_kw: seen.append(args) or "ok"
+        )
+        dispatch("bi_gate_probe_tool", {"path": "/tmp/x"})
+        dispatch("query_metric", {"metric": "dau", "dimensions": ["market"],
+                                  "time_window": {"start": "2026-08-01", "end": "2026-08-21"}})
+        assert len(seen) == 0
+        assert len(_CALLS) == 0, "白名单为空时连 query_metric 自己也不许跑"
 
 
 class TestFailureModes:

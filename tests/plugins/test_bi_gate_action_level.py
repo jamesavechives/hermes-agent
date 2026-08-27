@@ -242,6 +242,9 @@ class TestPolicyLoading:
             {"name": "dau", "dimensions": ["market"], "requires_time_window": True}]}),
             encoding="utf-8")
         monkeypatch.setenv("BI_GATE_REGISTRY", str(registry))
+        monkeypatch.setenv("BI_GATE_TOOLS", "query_metric")
+        # 字段 ③ 的工具白名单。不声明则门禁按最严拦一切，每个用例都要显式声明。
+        monkeypatch.setenv("BI_GATE_TOOLS", "query_metric")
         ns = "hermes_plugins"
         if ns not in sys.modules:
             import types
@@ -322,6 +325,7 @@ class TestOnTheRealDispatchPath:
             ],
         }), encoding="utf-8")
         monkeypatch.setenv("BI_GATE_REGISTRY", str(registry))
+        monkeypatch.setenv("BI_GATE_TOOLS", "query_metric")
         monkeypatch.setenv("BI_GATE_ACTION_POLICY", str(policy))
         monkeypatch.setenv("BI_GATE_ACTION_MAX", "L1")
 
