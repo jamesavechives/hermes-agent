@@ -1,0 +1,83 @@
+# bi-gate 人格门禁 —— CI
+#
+# 这条 workflow 检的是**代码**：检查器本身没写坏、样例声明合法、测试全绿。
+# 它检不了生产上那份 profile —— 那份不在仓库里（也不该在，里面有模型凭据）。
+# 真声明的强制点是 plugins/bi-gate/preflight.sh，跑在每次启动之前。
+#
+# 两个都要。CI 挡的是「有人把检查器改坏了」，preflight 挡的是「这台机器上
+# 这份声明不合法」。历史上我们栽过的那几次都属于后者。
+name: bi-gate
+
+on:
+  push:
+    paths:
+      - 'plugins/bi-gate/**'
+      - 'plugins/bi-query/**'
+      - 'tests/plugins/test_bi_*.py'
+      - '.github/workflows/bi-gate.yaml'
+  pull_request:
+    paths:
+      - 'plugins/bi-gate/**'
+      - 'plugins/bi-query/**'
+      - 'tests/plugins/test_bi_*.py'
+      - '.github/workflows/bi-gate.yaml'
+  workflow_dispatch:
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e . || pip install -r requirements.txt
+          pip install pytest
+
+      - name: 测试
+        run: python -m pytest tests/plugins/test_bi_*.py -q
+
+      - name: 生成样例 profile
+        run: ./plugins/bi-gate/make_example_profile.sh "$RUNNER_TEMP/profile-example"
+
+      - name: 装配期检查（样例 profile 必须能通过）
+        # 不加 --skip-runtime：第 5 项要真敲一遍文档里的探针命令，而
+        # 「文档写的命令根本执行不了」正是静态检查抓不到、只有真跑才发现得了
+        # 的那类问题（调研 §二第六条）。CI 是我们唯一能保证它每次都被敲一遍
+        # 的地方。
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python plugins/bi-gate/assemble_check.py "$RUNNER_TEMP/profile-example"
+
+      - name: 检查器必须拦得住坏声明
+        # 只验「合法的能过」是不够的 —— 一个永远返回 0 的检查器也能通过上一步。
+        # 这里故意把声明改坏，检查器必须报非 0。
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -e
+          BAD="$RUNNER_TEMP/profile-bad"
+          ./plugins/bi-gate/make_example_profile.sh "$BAD"
+
+          echo "→ 拿掉审批签字"
+          rm -f "$BAD/approvals.json"
+          if python plugins/bi-gate/assemble_check.py "$BAD" --skip-runtime; then
+            echo "::error::没有审批签字的声明被判为可部署" && exit 1
+          fi
+
+          echo "→ 恢复签字，改成 action_max 低于默认级别"
+          ./plugins/bi-gate/make_example_profile.sh "$BAD"
+          sed -i 's/^BI_GATE_ACTION_MAX=.*/BI_GATE_ACTION_MAX=L0/' "$BAD/.env"
+          sed -i 's/"default_level": *"L0"/"default_level": "L2"/' plugins/bi-gate/policy.example.json
+          if python plugins/bi-gate/assemble_check.py "$BAD" --skip-runtime; then
+            echo "::error::默认级别高于 action_max 的自相矛盾声明被判为可部署" && exit 1
+          fi
+          git checkout -- plugins/bi-gate/policy.example.json
+
+          echo "两个坏声明都被拦下了 ✓"

@@ -101,15 +101,55 @@ python /opt/hermes/plugins/bi-gate/verify.py
 
 第 3、4 条是上游的安全默认值，是对的，**不要为了部署方便改掉**。
 
+## 六又二分之一、启动命令（装配期检查的强制点）
+
+**不要直接 `hermes chat`。** 启动一律走包装器：
+
+```bash
+/opt/hermes/plugins/bi-gate/preflight.sh /data/profiles/bi -- hermes chat
+```
+
+检查不过就 `exec` 不到后面那半截，退出码沿用 `assemble_check.py`
+（1 = 有检查未通过，2 = 检查器自身出错）。两种都不启动 ——「检查器坏了」和
+「声明不合法」在后果上是一回事：都不知道这份声明合不合法，而查不了的东西不算安全。
+
+为什么要一个包装器，而不是「记得先跑一下 `assemble_check.py`」：这套门禁一路在
+纠正同一件事 —— 写在文档里、清单里、配置里给人看的规矩不是强制，强制只能做在
+**必经的路径**上。装配期检查也一样。
+
+新建 profile 照着样例来：
+
+```bash
+/opt/hermes/plugins/bi-gate/make_example_profile.sh /data/profiles/<名字>
+# 然后自己往 .env 里补模型凭据 —— 样例里刻意没有，也不该经过仓库
+```
+
+CI（`.github/workflows/bi-gate.yaml`）跑的是同一个检查器，但输入是样例 profile：
+它挡的是「有人把检查器改坏了」，挡不了「这台机器上这份真声明不合法」。
+真声明不在仓库里（也不该在，里面有凭据）。两个都要，谁也替不了谁。
+
 ## 七、跟着人格走的三份配置
 
 三份都建议放在 profile 自己的 home 里，跟着人格走、随卷挂载：
 
 ```bash
-BI_GATE_REGISTRY=$HERMES_HOME/bi_registry.json        # ② facts：这个人格能查哪些指标
-BI_GATE_ACTION_POLICY=$HERMES_HOME/action_policy.json # ③ 的一半：L0–L3 怎么分档
-BI_GATE_ACTION_MAX=L1                                 # ③ 的另一半：这个人格的动作上限
+# ⚠ 必须写绝对路径。不要写 $HERMES_HOME/... —— 那样是不展开的，见下。
+BI_GATE_REGISTRY=/data/profiles/bi/bi_registry.json        # ② facts：这个人格能查哪些指标
+BI_GATE_ACTION_POLICY=/data/profiles/bi/action_policy.json # ③ 的一半：L0–L3 怎么分档
+BI_GATE_ACTION_MAX=L1                                      # ③ 的另一半：这个人格的动作上限
 ```
+
+> **这一段原先写的是 `$HERMES_HOME/bi_registry.json`，是错的。**（2026-08-27 实测更正）
+>
+> `.env` 里的变量**没有任何一层会展开**：Hermes 自己的 `hermes_cli.config.load_env()`
+> 原样返回 `$HERMES_HOME/bi_registry.json` 这个字符串，我们的 `_parse_env`
+> 也刻意不展开（需要执行才能得出的配置本身就是审批不了的）。
+>
+> 照原文档建 profile 的后果是注册表读不到 → 空表 → **这个人格什么都查不了**。
+> 方向是安全的（fail-closed），但排查起来会绕远路：门禁看着「在工作」，
+> 业务方看到的是「它什么都答不上来」。
+>
+> 现在 `assemble_check.py` 会在部署前直接点出来（`注册表可读 ✗ 文件不存在：$HERMES_HOME/...`）。
 
 对应《人格门禁设计方案》里 Profile 的字段 ② 和 ③。**审批人不同**：注册表由事实层责任人批，
 `action_policy` 和 `action_max` 是技术负责人 + 合规双签，等同权限变更。所以它们是三个独立文件，

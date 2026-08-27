@@ -19,17 +19,30 @@
 根本执行不了，因为测试都按文件路径 import，唯独没人真的按文档敲一次。
 静态检查抓不到这种事，只能真敲一遍。
 
-为什么现在读 profile 目录而不是 profile.yaml
+为什么现在读 profile 目录而不是正式的声明文件
 --------------------------------------------
-``profile.yaml`` 还没落地（设计方案 §3.2 标着「未定稿、未实现」）。照一个不
+声明格式还没落地：形状已定（设计方案 §3.4 —— 五块拆成五个文件，各设
+CODEOWNERS），但生成工具还没写。照一个不
 存在的文件写检查器，等于又造一个跑不到真实数据上的东西——而这正是本项目一路
 在纠正的毛病。所以现在从 profile 目录里**实际存在的声明**读：``.env``、
 ``config.yaml``、注册表、动作策略。
 
-``profile.yaml`` 落地后只需换 :func:`load_declaration`，检查项一条都不用动。
+声明文件落地后只需换 :func:`load_declaration`，检查项一条都不用动。
 
-「接在哪」还没拍板（§十一第 5 项），但那不影响「检查什么」。这里做成一个
-退出码明确的独立脚本，CI / 容器启动 / 部署 gate 三种接法哪个定了都能直接调。
+接在哪（设计方案 §4.7，2026-08-27 已定）
+--------------------------------------
+两个地方都要，检的不是同一件事：
+
+- ``preflight.sh`` 在**每次启动前**跑，检这台机器上这份真声明合不合法。
+  它是强制点 —— 检查不过就 exec 不到启动命令。
+- CI（``.github/workflows/bi-gate.yaml``）在**每次 push** 跑，检这个检查器
+  本身没写坏、样例声明合法。它还专门验一步「拿掉审批签字必须报非 0」——
+  只验合法的能过是不够的，一个永远返回 0 的检查器也能过。
+
+CI 检不了生产上那份 profile（不在仓库里，里面有凭据）；启动前置发现不了
+「检查器被改成永远返回 0」。谁也替不了谁。
+
+所以这里保持成一个退出码明确的独立脚本：0 可部署，1 有项未过，2 检查器自己出错。
 
 用法
 ----
@@ -55,7 +68,7 @@ sys.path.insert(0, str(REPO))
 #: Agent Profile 的五块字段（系统 B §8.1 图 7）与当前声明位置的对应。
 #: 值为 None 表示这一块**目前没有任何声明位置**——不是"我们没查"，是"没地方写"。
 FIELD_SOURCES: Dict[str, Tuple[str, Optional[str]]] = {
-    "① persona":            ("身份与表达", None),
+    "① persona":            ("身份与表达", None),  # 等 persona.yaml（§3.4）
     "② facts":              ("受控事实层绑定", "BI_GATE_REGISTRY"),
     "③ tools + action_max": ("工具与动作上限", "BI_GATE_TOOLS"),
     "④ skills":             ("技能集与自演化开关", None),
@@ -178,7 +191,7 @@ def check_fields(decl: Dict[str, Any]) -> List[Result]:
     for field, (what, key) in FIELD_SOURCES.items():
         if key is None:
             out.append(Result(f"{field}（{what}）", None,
-                              "当前声明格式里没有这一块的位置 —— 等 profile.yaml"))
+                              "当前声明格式里没有这一块的位置 —— 等五个声明文件（设计方案 §3.4）"))
         elif env.get(key, "").strip():
             out.append(Result(f"{field}（{what}）", True, f"{key} 已声明"))
         else:

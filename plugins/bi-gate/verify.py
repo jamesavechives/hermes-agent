@@ -241,18 +241,43 @@ def main() -> int:
 
     plugins_mod.invoke_hook = _invoke_hook
 
+    # ── 判据自检 ─────────────────────────────────────────────────
+    # 早先这里用「替身被执行了几次」当判据：0 次即视为拦下。bi-query 插件落地
+    # 之后 query_metric 有了真实现，上面注册的替身不一定是真正被派发的那个，
+    # 于是计数恒为 0，**每个正例都会误报成「被拦」**——检查器开始测空气，
+    # 而且方向是红的，看起来像门禁出了问题，实际门禁完全正常。
+    # （2026-08-27 加 §⑦ 时顺手撞见的。）
+    #
+    # 所以先花一次调用确认替身还活着，再决定用哪个判据：
+    #   替身活着 → 「执行次数」，这是更强的证据（工具体一次都没跑）
+    #   替身没跑 → 「返回值里有没有门禁来源」，与 probe.py 同一个判据
+    double_live = False
+    if _probe_metric is not None:
+        _legit = next((a for lbl, a, sb in CASES if not sb), None)
+        if _legit is not None:
+            _before = len(_CALLS)
+            model_tools.handle_function_call("query_metric", dict(_legit))
+            double_live = len(_CALLS) > _before
+
+    def _blocked(result, executed):
+        return (executed == 0) if double_live else gate._is_gate_block(result)
+
     print("\n③ 派发路径实测：")
+    if not double_live:
+        print("   判据：返回值里有没有门禁来源（本环境 query_metric 有真实现，"
+              "替身没被派发，「执行次数」这个判据不成立）")
     ok3 = True
     for label, args, should_block in CASES:
         before = len(_CALLS)
         result = model_tools.handle_function_call("query_metric", args)
         executed = len(_CALLS) - before
-        blocked = executed == 0
+        blocked = _blocked(result, executed)
         hit = blocked == should_block
         ok3 = ok3 and hit
         note = " ← 拦截理由写明了来源" if blocked and gate._is_gate_block(result) else ""
+        detail = f"（工具体执行 {executed} 次）" if double_live else ""
         print(f"   [{'✓' if hit else '✗'}] {label:<22} "
-              f"{'拦下' if blocked else '放行'}（工具体执行 {executed} 次）{note}")
+              f"{'拦下' if blocked else '放行'}{detail}{note}")
 
     # ── ④ 动作分级（action_max）────────────────────────────────────
     policy = gate._policy_now()
@@ -281,10 +306,12 @@ def main() -> int:
             level, why = gate.classify_action(args, policy)
             lv = gate.level_name(level) if level is not None else "判定不了"
             should_block = level is None or level > effective_max
-            hit = (executed == 0) == should_block
+            blocked = _blocked(result, executed)
+            hit = blocked == should_block
             ok_action = ok_action and hit
+            detail = f"（工具体执行 {executed} 次）" if double_live else ""
             print(f"   [{'✓' if hit else '✗'}] {label:<20} 判为 {lv:<4} "
-                  f"{'拦下' if executed == 0 else '放行'}（工具体执行 {executed} 次）· {why}")
+                  f"{'拦下' if blocked else '放行'}{detail}· {why}")
         gate_logger.removeHandler(audit)
 
         # 留痕：每次调用都该留下恰好一条判定记录，且带级别。
@@ -342,7 +369,69 @@ def main() -> int:
         print(f"   [✗] 注册表里声明了 max_scan_rows 却没有 rows_per_day 的指标："
               f"{'、'.join(no_rows_per_day)} —— 这些指标的任何查询都会被拒")
 
-    allok = ok1 and ok2 and ok3 and ok_action and ok4 and not no_rows_per_day
+    # ── ⑦ 宿主级豁免：桥接工具 ────────────────────────────────────
+    # 这一段不是我们的插件能决定的事，是 Hermes 本身的派发结构决定的：
+    # ``model_tools.handle_function_call`` 里，``is_bridge_tool()`` 分支在
+    # pre_tool_call 派发点**之前**就 return 了（本仓库 model_tools.py:1267
+    # 对 :1384）。于是三个桥接工具根本走不到任何 pre_tool_call hook。
+    #
+    # 所以这里不做断言，做测量：每次部署自检都实地打一遍，把当前事实印出来。
+    # 写死成"已知它不受管"的话，等哪天上游把桥接也接进 hook，我们不会知道；
+    # 而"以为拦住了其实没拦"正是这套门禁一路在堵的那种失效。
+    print("\n⑦ 桥接工具（宿主级，不由本插件决定）：")
+    bridge_cases = [
+        ("tool_search", {"query": ""}, "枚举本会话可调度的工具名与描述"),
+        ("tool_describe", {"name": "__nonexistent__"}, "读任意可调度工具的参数 schema"),
+    ]
+    leaked = []
+    for name, args, what in bridge_cases:
+        try:
+            raw = model_tools.handle_function_call(name, dict(args))
+        except Exception as exc:
+            print(f"   [?] {name:<14} 派发时异常：{exc}")
+            continue
+        if gate._is_gate_block(raw):
+            print(f"   [✓] {name:<14} 被门禁拦下 —— 上游已把桥接接进 hook，本节可以删了")
+        else:
+            leaked.append(name)
+            print(f"   [!] {name:<14} 不经过门禁 · {what}")
+
+    # tool_call 是另一回事：它自己不过 hook，但会带着底层工具名递归回
+    # handle_function_call，门禁在那一层拦得住。执行面因此是闭合的，
+    # 泄的只是侦察面。这个区别必须实测，不能靠读代码得出。
+    probe_underlying = None
+    try:
+        from tools import tool_search as _ts_probe
+        from model_tools import get_tool_definitions as _get_defs
+        _defs = _get_defs(quiet_mode=True, skip_tool_search_assembly=True) or []
+        _scoped = sorted(_ts_probe.scoped_deferrable_names(_defs))
+        # 挑一个不需要必填参数的，否则会被参数探针挡在派发之前，测不到递归。
+        for _n in _scoped:
+            if _ts_probe.validate_deferred_call_args(_n, {}) is None:
+                probe_underlying = _n
+                break
+    except Exception:
+        pass
+
+    if probe_underlying is None:
+        print("   [?] tool_call      本环境没有无必填参数的可调度工具，递归路径这次测不到")
+        ok_bridge = True
+    else:
+        raw = model_tools.handle_function_call(
+            "tool_call", {"name": probe_underlying, "arguments": {}})
+        if gate._is_gate_block(raw):
+            print(f"   [✓] tool_call      借道调 {probe_underlying} 被门禁拦下 —— 执行面闭合")
+            ok_bridge = True
+        else:
+            print(f"   [✗] tool_call      借道调 {probe_underlying} **没被拦** —— 白名单可绕开")
+            ok_bridge = False
+
+    if leaked:
+        print(f"   → 已知缺口：{'、'.join(leaked)} 绕过白名单。泄的是工具名与参数 schema，"
+              f"不是执行权限。见设计方案 §5.3 与 §八。")
+
+    allok = (ok1 and ok2 and ok3 and ok_action and ok4 and ok_bridge
+             and not no_rows_per_day)
     print("\n结论：" + ("这个 profile 的门禁生效 ✓" if allok else "有环节未通 ✗"))
     if missing:
         print(f"注意：有 {len(missing)} 项约束未声明，它们此刻不生效（见 ⑥）。")
