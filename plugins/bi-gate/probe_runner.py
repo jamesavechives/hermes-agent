@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""探针调度器 —— 把 ``probe.py`` 定期跑起来，留痕，并推指标。
+"""探针调度器 —— 把 ``probe.py`` 定期跑起来，留痕，并上报。
 
 为什么单独一个文件，不把这些塞进 probe.py
 ------------------------------------------
@@ -7,7 +7,7 @@
 路径、观察结果。往里面加网络调用、文件写入、多 profile 循环，都会削弱这一点，
 而且它一旦自己挂了，就再也回答不了「门禁还在吗」。所以那个文件保持不动。
 
-这里做三件它不该做的事：调度多个 profile、把结果落盘、把状态推成指标。
+这里做三件它不该做的事：调度多个 profile、把结果落盘、把结果上报到遥测。
 
 为什么用子进程跑 probe.py 而不是 import 它
 ------------------------------------------
@@ -47,12 +47,23 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 PROBE = HERE / "probe.py"
 
-#: 指标写入地址。VictoriaMetrics 的 Prometheus 导入端点，形如
-#: ``https://<vm>/api/v1/import/prometheus``。**没配就不推**——不报错、不重试，
-#: 只在结果里标明没推。这是有意的：指标推不出去不该让探针本身变成失败。
-METRICS_URL_ENV = "BI_METRICS_URL"
-#: 可选的 Bearer token。
-METRICS_TOKEN_ENV = "BI_METRICS_TOKEN"
+#: 遥测汇聚点。VictoriaLogs 的 JSON Lines 写入端点，形如
+#: ``https://<vlogs>/insert/jsonline``（查询串由本模块补，操作者只需给基址）。
+#:
+#: 为什么是日志而不是指标：2026-08-27 实测，dev 机在 K8s 集群外，
+#: VictoriaMetrics 只有集群内 service 地址、没有对外 ingress，扫了 19 个候选
+#: 域名都不通；VictoriaLogs 有 ingress 且可写、无需鉴权。而「长时间没有数据」
+#: 这件事在 Grafana 里由告警规则的 No Data 状态表达，日志侧同样做得到 ——
+#: 原先「指标才好告警」的顾虑不成立，为它去动网络拓扑不划算。
+#:
+#: **没配就不推**：不报错、不重试，只在 stderr 说一句。这是有意的——上报失败是
+#: 遥测链路的问题，把它算成门禁失效会制造假警报。
+SINK_URL_ENV = "BI_PROBE_SINK_URL"
+#: 可选的 Bearer token（当前 dev 环境不需要）。
+SINK_TOKEN_ENV = "BI_PROBE_SINK_TOKEN"
+
+#: 日志流的 app 标签。Grafana 那边按它筛。
+SINK_APP = "bi-gate-probe"
 
 #: 探针结果落盘位置。缺省写到 profile 自己的目录下。
 PROBE_LOG_ENV = "BI_PROBE_LOG"
@@ -204,39 +215,47 @@ def write_record(profile: Path, record: Dict[str, Any]) -> bool:
 # 指标
 # ---------------------------------------------------------------------------
 
-def render_metrics(records: List[Dict[str, Any]]) -> str:
-    """Prometheus 文本格式。
+def render_sink_payload(records: List[Dict[str, Any]]) -> str:
+    """JSON Lines —— 一行一条，就是落盘的那条记录本身。
 
-    只推两个：
-      * ``bi_gate_probe_alive``     1=门禁在拦，0=没拦或不知道
-      * ``bi_gate_probe_exit_code`` 0/1/2 —— 区分「门禁失效」和「探针自身坏了」，
-        这两种的处置完全不同，混成一个告警会互相淹没
+    落盘和上报用**同一份数据**，不维护两套格式：两套格式意味着两处可能漂移，
+    而事后对账时「盘上写的」和「报上去的」对不上是最难查的一类问题。
 
-    **不推「跑了多少次」这类计数器**：告警要的是「最近有没有新数据」，那件事
-    由写入时间戳天然表达，不需要我们自己维护计数。
+    只补两个纯路由字段：``app``（Grafana 按它筛）和 ``time``（VictoriaLogs 的
+    时间字段要 RFC3339，而记录里的 ``ts`` 是整数 epoch，留着好做算术）。
     """
-    lines = ["# TYPE bi_gate_probe_alive gauge",
-             "# TYPE bi_gate_probe_exit_code gauge"]
+    lines = []
     for r in records:
-        label = f'{{profile="{r.get("profile", "")}"}}'
-        lines.append(f"bi_gate_probe_alive{label} {1 if r.get('status') == 'alive' else 0}")
-        lines.append(f"bi_gate_probe_exit_code{label} {int(r.get('exit_code', 2))}")
+        doc = dict(r)
+        doc["app"] = SINK_APP
+        doc["time"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(r.get("ts") or time.time()))
+        lines.append(json.dumps(doc, ensure_ascii=False, sort_keys=True, default=str))
     return "\n".join(lines) + "\n"
 
 
-def push_metrics(payload: str) -> Tuple[bool, str]:
-    """推到 VictoriaMetrics。没配地址就跳过。
+def _sink_url() -> Optional[str]:
+    """补齐 VictoriaLogs 需要的查询串。
 
-    推送失败**不影响退出码**：探针的职责是回答门禁在不在，指标推不出去是监控
-    链路的问题，把它算成门禁失效会制造假警报。但失败要打到 stderr，让 timer
-    的日志里看得见。
+    操作者只需要在配置里给基址。参数由代码补，是因为这几个字段名是**我们和
+    Grafana 查询之间的契约**——写在配置里的话，改一处忘一处就会出现「数据进去
+    了但查不到」，那种故障和「没数据」在告警上长得一模一样。
     """
-    url = os.environ.get(METRICS_URL_ENV, "").strip()
+    raw = os.environ.get(SINK_URL_ENV, "").strip()
+    if not raw:
+        return None
+    if "?" in raw:  # 操作者显式给了参数就照他的来
+        return raw
+    return raw + "?_stream_fields=app,profile&_msg_field=detail&_time_field=time"
+
+
+def push_records(payload: str) -> Tuple[bool, str]:
+    """上报。没配地址就跳过，失败不影响退出码。"""
+    url = _sink_url()
     if not url:
-        return False, "未配置 " + METRICS_URL_ENV
+        return False, "未配置 " + SINK_URL_ENV
     req = urllib.request.Request(url, data=payload.encode("utf-8"), method="POST")
-    req.add_header("Content-Type", "text/plain")
-    token = os.environ.get(METRICS_TOKEN_ENV, "").strip()
+    req.add_header("Content-Type", "application/stream+json")
+    token = os.environ.get(SINK_TOKEN_ENV, "").strip()
     if token:
         req.add_header("Authorization", f"Bearer {token}")
     try:
@@ -264,9 +283,9 @@ def main(argv: List[str]) -> int:
         print(f"[{mark}] {record['profile']:<12} {record['status']:<12} "
               f"exit={record.get('exit_code')}  {record.get('detail', '')}")
 
-    ok, note = push_metrics(render_metrics(records))
+    ok, note = push_records(render_sink_payload(records))
     if not ok:
-        print(f"[probe-runner] 指标未推送：{note}", file=sys.stderr)
+        print(f"[probe-runner] 遥测未上报：{note}", file=sys.stderr)
 
     if any(r["status"] != "alive" for r in records):
         return 1

@@ -224,51 +224,93 @@ def test_write_failure_does_not_raise(rn, profile, tmp_path, monkeypatch):
     assert rn.write_record(profile, {"x": 1}) is False
 
 
-# ── 指标 ────────────────────────────────────────────────────────────────
+# ── 上报 ────────────────────────────────────────────────────────────────
 
-def test_metrics_exposition_format(rn):
-    out = rn.render_metrics([
-        {"profile": "bi", "status": "alive", "exit_code": 0},
-        {"profile": "cs", "status": "gate_down", "exit_code": 1},
-    ])
-    assert 'bi_gate_probe_alive{profile="bi"} 1' in out
-    assert 'bi_gate_probe_alive{profile="cs"} 0' in out
-    assert 'bi_gate_probe_exit_code{profile="cs"} 1' in out
-    assert out.endswith("\n"), "Prometheus 文本格式必须以换行结尾"
+def test_sink_payload_is_the_record_itself(rn):
+    """上报的就是落盘那条记录，只多两个路由字段。
 
-
-def test_exit_code_is_a_separate_series(rn):
-    """exit_code 单独推是有意的。
-
-    「门禁失效」（1）和「探针自身坏了」（2）的处置完全不同，只看 alive=0
-    分不开这两种，混成一个告警会互相淹没。
+    落盘和上报共用一份数据是有意的：两套格式意味着两处会漂移，而「盘上写的」
+    和「报上去的」对不上，是事后对账时最难查的一类问题。
     """
-    out = rn.render_metrics([{"profile": "bi", "status": "probe_error", "exit_code": 2}])
-    assert 'bi_gate_probe_alive{profile="bi"} 0' in out
-    assert 'bi_gate_probe_exit_code{profile="bi"} 2' in out
+    rec = {"event": "bi_gate_probe_run", "profile": "bi", "status": "alive",
+           "exit_code": 0, "detail": "门禁在工作", "ts": 1787800000}
+    doc = json.loads(rn.render_sink_payload([rec]).strip())
+    for k, v in rec.items():
+        assert doc[k] == v, f"原记录的 {k} 不该被改动"
+    assert doc["app"] == "bi-gate-probe"
+    assert doc["time"] == "2026-08-27T03:06:40Z", "VictoriaLogs 要 RFC3339"
+
+
+def test_sink_payload_is_one_line_per_record(rn):
+    out = rn.render_sink_payload([
+        {"profile": "bi", "status": "alive", "ts": 1787800000},
+        {"profile": "cs", "status": "gate_down", "ts": 1787800000},
+    ])
+    lines = [l for l in out.splitlines() if l.strip()]
+    assert len(lines) == 2
+    assert {json.loads(l)["profile"] for l in lines} == {"bi", "cs"}
+    assert out.endswith("\n")
+
+
+def test_ts_stays_an_integer(rn):
+    """``ts`` 保持整数 epoch，另加 ``time`` 给 VictoriaLogs 用。
+
+    时间字段有两个不是冗余：整数好做算术（比如算探针间隔），RFC3339 是
+    VictoriaLogs 的要求。合成一个就得在某一边做转换。
+    """
+    doc = json.loads(rn.render_sink_payload([{"profile": "bi", "ts": 1787800000}]).strip())
+    assert isinstance(doc["ts"], int)
+    assert isinstance(doc["time"], str)
+
+
+def test_query_string_is_appended_by_code_not_config(rn, monkeypatch):
+    """字段名由代码补齐，不写在配置里。
+
+    这几个字段名是我们和 Grafana 查询之间的契约。写在配置里的话，改一处忘
+    一处就会「数据进去了但查不到」—— 那种故障在告警上和「没数据」长得一样。
+    """
+    monkeypatch.setenv("BI_PROBE_SINK_URL", "https://vlogs.example.com/insert/jsonline")
+    url = rn._sink_url()
+    assert "_stream_fields=app,profile" in url
+    assert "_msg_field=detail" in url
+    assert "_time_field=time" in url
+
+
+def test_explicit_query_string_is_respected(rn, monkeypatch):
+    custom = "https://vlogs.example.com/insert/jsonline?_stream_fields=app"
+    monkeypatch.setenv("BI_PROBE_SINK_URL", custom)
+    assert rn._sink_url() == custom, "操作者显式给了参数就照他的来"
 
 
 def test_no_url_means_skip_not_failure(rn, monkeypatch):
     """没配地址就不推 —— 不报错、不重试。
 
-    指标推不出去是监控链路的问题，把它算成门禁失效会制造假警报。
+    上报失败是遥测链路的问题，把它算成门禁失效会制造假警报。
     """
-    monkeypatch.delenv("BI_METRICS_URL", raising=False)
-    ok, note = rn.push_metrics("x 1\n")
+    monkeypatch.delenv("BI_PROBE_SINK_URL", raising=False)
+    ok, note = rn.push_records("{}\n")
     assert ok is False
-    assert "BI_METRICS_URL" in note
+    assert "BI_PROBE_SINK_URL" in note
 
 
 def test_push_failure_is_reported_not_raised(rn, monkeypatch):
-    monkeypatch.setenv("BI_METRICS_URL", "http://127.0.0.1:1/nope")
-    ok, note = rn.push_metrics("x 1\n")
+    monkeypatch.setenv("BI_PROBE_SINK_URL", "http://127.0.0.1:1/nope")
+    ok, note = rn.push_records("{}\n")
     assert ok is False and note
+
+
+def test_push_failure_does_not_change_exit_code(rn, profile, tmp_path, monkeypatch):
+    """上报挂了，探针结论不变 —— 门禁是好的就还是 0。"""
+    monkeypatch.setenv("BI_PROBE_SINK_URL", "http://127.0.0.1:1/nope")
+    monkeypatch.setattr(rn, "PROBE", _fake_probe(tmp_path, stream="stderr",
+                                                 status="alive", code=0))
+    assert rn.main(["x", str(profile)]) == 0
 
 
 # ── 退出码 ──────────────────────────────────────────────────────────────
 
 def test_main_exit_codes(rn, profile, tmp_path, monkeypatch):
-    monkeypatch.delenv("BI_METRICS_URL", raising=False)
+    monkeypatch.delenv("BI_PROBE_SINK_URL", raising=False)
 
     monkeypatch.setattr(rn, "PROBE", _fake_probe(tmp_path, stream="stderr", status="alive", code=0))
     assert rn.main(["x", str(profile)]) == 0
@@ -284,6 +326,6 @@ def test_no_arguments_is_an_error_not_a_silent_success(rn):
 
 
 def test_one_bad_profile_fails_the_whole_run(rn, profile, tmp_path, monkeypatch):
-    monkeypatch.delenv("BI_METRICS_URL", raising=False)
+    monkeypatch.delenv("BI_PROBE_SINK_URL", raising=False)
     monkeypatch.setattr(rn, "PROBE", _fake_probe(tmp_path, stream="stderr", status="alive", code=0))
     assert rn.main(["x", str(profile), str(tmp_path / "不存在")]) == 1
