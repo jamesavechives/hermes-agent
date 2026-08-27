@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import date
 from typing import Any, Mapping, Optional, Sequence
 
 
@@ -24,12 +25,25 @@ REJECT_UNKNOWN_METRIC = "rejected_unknown_metric"
 REJECT_BAD_PARAM = "rejected_bad_param"
 REJECT_NO_TIME_WINDOW = "rejected_no_time_window"
 REJECT_SCAN = "rejected_scan"
+#: 单次没超、但本会话累计超了。与 REJECT_SCAN 分开，因为处置方式完全不同：
+#: 单次超限缩小时间窗就能过，累计超限缩不出来——已经拿走的数据不会退回去。
+REJECT_SESSION_SCAN = "rejected_session_scan"
 #: 动作级别超出该人格声明的 action_max。与"参数不合法"分开，是因为它是权限问题：
 #: 调用本身没写错，是这个人格没被授权做这么重的动作，处理方式也不同（找审批，不是改参数）。
 REJECT_ACTION_LEVEL = "rejected_action_level"
 #: 门禁自身出错。单列一类是为了运维能分开看：这类的量上升说明门禁坏了，
 #: 而不是调用方在乱调。它和其它拒因混在一起统计会互相淹没。
 REJECT_GATE_ERROR = "rejected_gate_error"
+
+#: 判定不了。与 True/False 并列的第三种结果 —— 动作分级里可能是「规则要求某
+#: 参数是数字、实际传了字符串」，扫描预检里是「注册表没声明 rows_per_day」。
+#: 两处的处理方向一致：**判定不了一律当不通过**。当成"不匹配"会把级别降下来，
+#: 当成"没限制"会让填不全的注册表静默变成没有上限。
+UNDECIDABLE = object()
+
+#: evaluate() 里 estimated_rows 的默认哨兵：区分"没传"（自己算）和"显式传 None"
+#: （跳过检查）。用 None 当默认值正是这条规则以前从来不生效的原因。
+_DERIVE = object()
 PASSED = "passed"
 
 #: 拦截来源。必须出现在给模型看的拒绝理由里——否则模型会自己编一个归因。
@@ -80,6 +94,10 @@ class MetricSpec:
     requires_time_window: bool = True
     #: 单次查询允许的最大扫描行数；None 表示不限（仅用于已知极小的维表）。
     max_scan_rows: Optional[int] = None
+    #: 该指标底表每天大约多少行。**由事实层责任人声明**，不是模型能填的东西——
+    #: 让模型报预估等于把强制交给被约束方，和「配置里的清单不是强制」是同一类错误。
+    #: 声明了 max_scan_rows 却没声明这个，会让扫描预检判不了（见 estimate_scan_rows）。
+    rows_per_day: Optional[int] = None
 
 
 class MetricRegistry:
@@ -173,22 +191,126 @@ def check_time_window(time_window: Any, spec: MetricSpec) -> Verdict:
     return ALLOW
 
 
-def check_scan_budget(estimated_rows: Optional[int], spec: MetricSpec) -> Verdict:
+def estimate_scan_rows(args: Mapping[str, Any], spec: MetricSpec) -> Any:
+    """预估这次查询要扫多少行。
+
+    只用两样东西：**注册表里的声明**（``rows_per_day``）和**这次调用自己的
+    参数**（时间窗跨度）。都在门禁手里，所以不用连库、不用跨插件回调、
+    也绝不采信模型自报的预估值——采信了就等于把强制交给被约束方。
+
+    这是个上界估算，不是测量。真实扫描行数由执行层在查完之后记进审计
+    （``bi-query`` 的 ``scanned_rows``），两边事后能对账：预估长期偏得离谱，
+    说明 ``rows_per_day`` 该修了。
+
+    维度个数不进公式：列存下多切一个维度是多读一列，不是多读一批行。
+
+    返回预估行数；无法预估时返回 :data:`UNDECIDABLE`。
+    """
+    if spec.rows_per_day is None:
+        return UNDECIDABLE
+    days = 1
+    window = args.get("time_window")
+    if isinstance(window, Mapping):
+        start, end = window.get("start"), window.get("end")
+        if isinstance(start, str) and isinstance(end, str):
+            try:
+                d0 = date.fromisoformat(start[:10])
+                d1 = date.fromisoformat(end[:10])
+            except ValueError:
+                return UNDECIDABLE
+            days = max(1, (d1 - d0).days)
+        elif spec.requires_time_window:
+            # 要求时间窗却给不出来 —— 这一步不该由扫描预检来拒，
+            # check_time_window 会先拦下；走到这里说明调用方跳过了那一步。
+            return UNDECIDABLE
+    elif spec.requires_time_window:
+        return UNDECIDABLE
+    return spec.rows_per_day * days
+
+
+def check_scan_budget(estimated_rows: Any, spec: MetricSpec) -> Verdict:
     """扫描量预检。
 
-    `estimated_rows` 由调用方在派发前用 EXPLAIN 拿到；拿不到时传 None，
-    此处放行——预检失败不应该变成业务不可用，但要在审计里留痕（由执行层记录）。
+    ``estimated_rows`` 由 :func:`estimate_scan_rows` 算出，或由调用方用
+    EXPLAIN 之类的真实预估覆盖。``None`` 表示调用方明确不做这项检查。
+
+    三条分支，每条的方向都是有意选的：
+
+    * 指标没声明 ``max_scan_rows``：没人要求限额，放行。
+    * 声明了限额但预估不出来（:data:`UNDECIDABLE`）：**拒绝**。判定不了当作
+      不通过，和动作分级里 UNDECIDABLE 必须拒是同一条原则——否则「注册表填
+      得不全」会静默变成「这个指标没有扫描上限」。
+    * 预估超限：拒绝，并告诉模型怎么改（缩时间窗），因为这一条确实是改参数
+      就能过的，和越权类拒绝不一样。
     """
     if spec.max_scan_rows is None or estimated_rows is None:
         return ALLOW
+    if estimated_rows is UNDECIDABLE:
+        return _deny(
+            REJECT_SCAN,
+            f"指标 {spec.name} 声明了扫描上限 {spec.max_scan_rows:,} 行，"
+            f"但注册表里没有 rows_per_day，预估不出这次要扫多少 —— 判定不了按不通过处理。"
+            "请事实层责任人补上该指标的 rows_per_day 声明。",
+            metric=spec.name,
+            limit=spec.max_scan_rows,
+            reason="undecidable",
+        )
     if estimated_rows > spec.max_scan_rows:
         return _deny(
             REJECT_SCAN,
             f"预估扫描 {estimated_rows:,} 行，超过指标 {spec.name} 的上限 "
-            f"{spec.max_scan_rows:,} 行。请缩小时间窗或减少维度后重试。",
+            f"{spec.max_scan_rows:,} 行。请缩小时间窗后重试。",
             metric=spec.name,
             estimated_rows=estimated_rows,
             limit=spec.max_scan_rows,
+        )
+    return ALLOW
+
+
+def check_session_scan_budget(
+    session_scanned: int,
+    this_call: Any,
+    session_limit: Optional[int],
+) -> Verdict:
+    """会话累计扫描量预检。
+
+    为什么需要它：单次限额约束的是单次调用，不是一次会话总共拉走多少。
+    2026-08-27 实测——半年的查询被单次限额拦下后，模型把它拆成 6 个月度查询
+    逐月执行再自己求和：每一次都合规，7 次调用累计扫了 2.412 亿行，比那次被
+    拦的 2.172 亿还多。模型不是在对抗，它在完成任务；规则守住了自己的字面，
+    意图从旁边流走了。
+
+    这条和单次限额是两个不同的问题，所以拒因也分开（见 REJECT_SESSION_SCAN）。
+
+    ``session_limit`` 为 ``None`` 表示该人格没有声明会话预算，本项不检查——
+    这一层是加在单次限额之上的额外约束，缺省值取 0 会让任何查询都做不了，
+    与 ``action_max`` 未声明按 L0（最严但仍可用）的取舍不同。**没声明这件事
+    本身要在部署自检里显式报出来**，不能变成静默缺失。
+
+    ``this_call`` 判定不了（:data:`UNDECIDABLE`）时按不通过处理，与单次限额一致。
+    """
+    if session_limit is None:
+        return ALLOW
+    if this_call is UNDECIDABLE:
+        return _deny(
+            REJECT_SESSION_SCAN,
+            "预估不出这次要扫多少行，无法计入会话累计预算 —— 判定不了按不通过处理。",
+            session_scanned=session_scanned,
+            session_limit=session_limit,
+            reason="undecidable",
+        )
+    projected = session_scanned + (this_call or 0)
+    if projected > session_limit:
+        return _deny(
+            REJECT_SESSION_SCAN,
+            f"本次会话累计扫描将达 {projected:,} 行，超过该人格的会话上限 "
+            f"{session_limit:,} 行（本次会话此前已扫 {session_scanned:,} 行）。"
+            "缩小这一次的时间窗也解决不了 —— 累计额度是按会话算的。"
+            "确需继续，请走授权变更流程调整会话扫描预算。",
+            session_scanned=session_scanned,
+            this_call=this_call,
+            projected=projected,
+            session_limit=session_limit,
         )
     return ALLOW
 
@@ -248,11 +370,6 @@ class ActionRule:
     when: Mapping[str, Any]
     #: 给人看的说明，会进审计和拒绝理由。写清楚"为什么这算这一级"。
     label: str = ""
-
-
-#: 判定不了。与 True/False 并列的第三种结果 —— 例如规则要求某参数是数字、
-#: 实际传了字符串。这种情况不能当成"不匹配"（那会把级别降下来），必须显式拒绝。
-UNDECIDABLE = object()
 
 
 def _match_one(op: str, spec: Any, args: Mapping[str, Any]) -> Any:
@@ -397,7 +514,7 @@ def check_action_level(
 def evaluate(
     args: Mapping[str, Any],
     registry: MetricRegistry,
-    estimated_rows: Optional[int] = None,
+    estimated_rows: Any = _DERIVE,
     policy: Optional[ActionPolicy] = None,
     action_max: Optional[int] = None,
 ) -> Verdict:
@@ -413,7 +530,13 @@ def evaluate(
 
     :param args: query_metric 的调用参数。
     :param registry: 当前生效的指标注册表。
-    :param estimated_rows: EXPLAIN 预估行数，没有则传 None。
+    :param estimated_rows: 扫描行数预估。默认由 :func:`estimate_scan_rows` 从
+        注册表声明与调用参数算出；调用方有更准的数（例如真做了一次 EXPLAIN）
+        可以直接传进来覆盖；显式传 ``None`` 表示跳过这项检查。
+
+        默认值刻意不是 ``None``：原来钩子里写死 ``estimated_rows=None``，
+        导致这条规则在 rules.py 里有、有测试、而生产路径上永远不生效。
+        改成默认自己算，漏传的后果就变成"照常检查"而不是"静默跳过"。
     :param policy: 动作分级策略。``None`` 表示这一层未启用（不判级别，直接跳过）。
     :param action_max: 该人格声明的动作上限序号。``None`` 且 policy 启用时按 L0 处理。
     :returns: 放行为 ``ALLOW``，否则是带拒因与理由的 :class:`Verdict`。
@@ -434,7 +557,10 @@ def evaluate(
     for verdict in (
         check_dimensions(args.get("dimensions"), spec),
         check_time_window(args.get("time_window"), spec),
-        check_scan_budget(estimated_rows, spec),
+        check_scan_budget(
+            estimate_scan_rows(args, spec) if estimated_rows is _DERIVE else estimated_rows,
+            spec,
+        ),
     ):
         if verdict.blocked:
             return verdict

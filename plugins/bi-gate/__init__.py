@@ -41,7 +41,9 @@ from .rules import (
     MetricRegistry,
     MetricSpec,
     Verdict,
+    check_session_scan_budget,
     classify_action,
+    estimate_scan_rows,
     evaluate,
     level_name,
     parse_level,
@@ -71,6 +73,11 @@ ACTION_MAX_ENV = "BI_GATE_ACTION_MAX"
 #: 反过来做（未声明就不限制）会让「忘了配」和「配成全开」在行为上无法区分，
 #: 那正是这套门禁要消灭的失效方式。
 TOOLS_ENV = "BI_GATE_TOOLS"
+
+#: 该人格单次会话允许的累计扫描行数。未声明表示不做这项检查——这一层加在
+#: 单次限额之上，缺省取 0 会让任何查询都做不了。**没声明这件事由 verify.py
+#: 显式报出来**，不能变成静默缺失。
+SESSION_SCAN_MAX_ENV = "BI_GATE_SESSION_SCAN_MAX"
 
 
 # ---------------------------------------------------------------------------
@@ -104,6 +111,7 @@ def _load_registry() -> MetricRegistry:
                     dimensions=frozenset(item.get("dimensions", ())),
                     requires_time_window=bool(item.get("requires_time_window", True)),
                     max_scan_rows=item.get("max_scan_rows"),
+                    rows_per_day=item.get("rows_per_day"),
                 )
             )
         except (KeyError, TypeError) as exc:
@@ -337,6 +345,92 @@ def _audit(
 # Hooks
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# 会话累计扫描量
+# ---------------------------------------------------------------------------
+#
+# 状态放在这一层而不是 rules.py：rules.py 是纯判定，不碰 I/O 也不持有状态，
+# 这样每条规则都能单独测、也能拿去离线重放历史轨迹。
+
+#: session_id → 本会话已放行的累计预估扫描行数。
+_session_scanned: Dict[str, int] = {}
+
+#: 已经从审计文件播过种的 session_id，避免重复扫盘。
+_session_seeded: set = set()
+
+
+def _session_scan_max() -> Optional[int]:
+    raw = os.environ.get(SESSION_SCAN_MAX_ENV, "").strip()
+    if not raw:
+        return None
+    try:
+        value = int(raw)
+    except ValueError:
+        logger.error("bi-gate: %s=%r 不是整数，会话扫描预算按未声明处理", SESSION_SCAN_MAX_ENV, raw)
+        return None
+    return value if value >= 0 else None
+
+
+def _seed_session_from_audit(session_id: str) -> int:
+    """从审计文件把该会话此前已放行的扫描量读回来。
+
+    为什么要播种：计数器在进程内存里，而一个会话可能跨进程（resume、
+    gateway 重启、cron 续跑）。不播种的话，重启一次额度就清零——那等于给出
+    一条「重启即可绕过」的路径，和我们一路在堵的失效方式是同一类。
+
+    审计文件就是账本，不另外维护一份状态：多一份状态就多一处会跟账本不一致
+    的地方。代价是每个会话首次判定要扫一遍文件，只发生一次。
+    """
+    path = _audit_path()
+    if path is None or not session_id:
+        return 0
+    total = 0
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line or session_id not in line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except ValueError:
+                    continue
+                if (
+                    rec.get("session_id") == session_id
+                    and rec.get("gate_result") == PASSED
+                    and isinstance(rec.get("estimated_rows"), int)
+                ):
+                    total += rec["estimated_rows"]
+    except FileNotFoundError:
+        return 0
+    except Exception:
+        # 播种失败按 0 计。这是有意选的方向：读不出账本时把额度算少，
+        # 会放宽约束而不是误伤业务；同时打 ERROR，让运维看得见。
+        logger.exception("bi-gate: 从审计播种会话扫描量失败，本会话按 0 起算")
+        return 0
+    return total
+
+
+def _session_scanned_now(session_id: str) -> int:
+    if session_id and session_id not in _session_seeded:
+        _session_scanned[session_id] = _seed_session_from_audit(session_id)
+        _session_seeded.add(session_id)
+    return _session_scanned.get(session_id, 0)
+
+
+def _session_add(session_id: str, rows: Any) -> None:
+    """放行后累加。只有真正放行的调用才计入——被拦的没有真的去扫。"""
+    if not session_id or not isinstance(rows, int):
+        return
+    _session_scanned[session_id] = _session_scanned.get(session_id, 0) + rows
+
+
+def reset_session_counters() -> None:
+    """清空会话计数。测试用。"""
+    _session_scanned.clear()
+    _session_seeded.clear()
+
+
 def _audit_tool_denied(tool_name: str, allowed: frozenset, context: Mapping[str, Any]) -> None:
     """白名单拒绝的留痕。
 
@@ -425,25 +519,46 @@ def _on_pre_tool_call(
         policy = _policy_now()
         action_max = _action_max_now()
 
-        # EXPLAIN 预估行数由执行层在派发前填进来；当前阶段还没接，先传 None
-        # （check_scan_budget 会放行并留给执行层记录）。
+        # 扫描量预估不再传 None —— 那行写死的 None 让这条规则在生产路径上
+        # 从来没生效过（规则在 rules.py 里、有测试、永远拿不到值）。
+        # 现在不传，由 evaluate 自己按注册表声明 + 时间窗跨度算。
+        registry = _registry_now()
         verdict = evaluate(
             args,
-            _registry_now(),
-            estimated_rows=None,
+            registry,
             policy=policy,
             action_max=action_max,
         )
+
+        # 单次预估：审计要记（放行的也记，事后才能对账「预估 vs 实际」），
+        # 会话累计也要用它。评估一次，两处共用。
+        spec = registry.get(args.get("metric"))
+        this_call = estimate_scan_rows(args, spec) if spec is not None else None
+        session_id = str(context.get("session_id") or "")
+
+        # ── 会话累计预算 ──────────────────────────────────────────────
+        # 只有单次判定已经通过才轮到它：先回答「这次调用本身合不合法」，
+        # 再回答「这个会话还有没有额度」，拒因不会互相盖住。
+        session_limit = _session_scan_max()
+        if not verdict.blocked and session_limit is not None:
+            verdict = check_session_scan_budget(
+                _session_scanned_now(session_id), this_call, session_limit
+            )
+
         _audit(
             verdict,
             args,
             action_level=_describe_level(args, policy),
             action_max=level_name(action_max) if action_max is not None else None,
+            estimated_rows=this_call if isinstance(this_call, int) else None,
+            session_scanned_before=_session_scanned_now(session_id) if session_limit else None,
             session_id=context.get("session_id"),
             task_id=context.get("task_id"),
             tool_call_id=context.get("tool_call_id"),
         )
         if not verdict.blocked:
+            # 放行之后才累加 —— 被拦的调用没有真的去扫，不该占额度。
+            _session_add(session_id, this_call)
             return None
         return {"action": "block", "message": verdict.reason or "BI 门禁拦截。"}
     except Exception:

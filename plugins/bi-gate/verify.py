@@ -310,8 +310,42 @@ def main() -> int:
     print(f"\n⑤ 存活探针: {result.status} (exit={result.exit_code})")
     ok4 = result.status == probe.ALIVE
 
-    allok = ok1 and ok2 and ok3 and ok_action and ok4
+    # ── ⑥ 声明完整性 ──────────────────────────────────────────────
+    # 这一段不判对错，只把「哪些约束这个 profile 根本没声明」摆出来。
+    # 没声明的约束不会报错、不会拦人、也不会出现在任何日志里——那正是
+    # 这套门禁一路在堵的失效方式，所以要在部署自检里显式点名。
+    print("\n⑥ 声明完整性（未声明 = 该约束不生效，不是安全默认）：")
+    declared = []
+    missing = []
+    (declared if os.environ.get("BI_GATE_TOOLS", "").strip() else missing).append(
+        ("BI_GATE_TOOLS", "工具白名单（未声明则拦一切）"))
+    (declared if os.environ.get("BI_GATE_ACTION_POLICY", "").strip() else missing).append(
+        ("BI_GATE_ACTION_POLICY", "动作分级策略（未声明则不分级）"))
+    (declared if os.environ.get("BI_GATE_ACTION_MAX", "").strip() else missing).append(
+        ("BI_GATE_ACTION_MAX", "动作上限（未声明按 L0）"))
+    (declared if os.environ.get("BI_GATE_SESSION_SCAN_MAX", "").strip() else missing).append(
+        ("BI_GATE_SESSION_SCAN_MAX", "会话累计扫描预算（未声明则只有单次限额）"))
+    (declared if os.environ.get("BI_AUDIT_LOG", "").strip()
+        or os.environ.get("HERMES_HOME", "").strip() else missing).append(
+        ("BI_AUDIT_LOG", "审计落盘路径（未声明则本次判定不留痕）"))
+    for name, what in declared:
+        print(f"   [✓] {name:<28} {what}")
+    for name, what in missing:
+        print(f"   [ ] {name:<28} {what}  ← 未声明")
+
+    reg = _reg
+    no_rows_per_day = [
+        n for n in reg.names
+        if (sp := reg.get(n)) and sp.max_scan_rows is not None and sp.rows_per_day is None
+    ]
+    if no_rows_per_day:
+        print(f"   [✗] 注册表里声明了 max_scan_rows 却没有 rows_per_day 的指标："
+              f"{'、'.join(no_rows_per_day)} —— 这些指标的任何查询都会被拒")
+
+    allok = ok1 and ok2 and ok3 and ok_action and ok4 and not no_rows_per_day
     print("\n结论：" + ("这个 profile 的门禁生效 ✓" if allok else "有环节未通 ✗"))
+    if missing:
+        print(f"注意：有 {len(missing)} 项约束未声明，它们此刻不生效（见 ⑥）。")
     return 0 if allok else 1
 
 

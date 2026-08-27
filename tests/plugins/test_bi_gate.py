@@ -40,6 +40,7 @@ GATE_SOURCE = _rules.GATE_SOURCE
 MetricRegistry = _rules.MetricRegistry
 MetricSpec = _rules.MetricSpec
 evaluate = _rules.evaluate
+estimate_scan_rows = _rules.estimate_scan_rows
 
 
 @pytest.fixture
@@ -50,6 +51,9 @@ def registry() -> MetricRegistry:
                 name="dau",
                 dimensions=frozenset({"market", "channel"}),
                 max_scan_rows=1_000_000,
+                # 声明了扫描上限就必须给出 rows_per_day，否则预估不出来、
+                # 按「判定不了」拒绝。这条是有意的压力：注册表填不全就用不了。
+                rows_per_day=10_000,
             ),
             MetricSpec(
                 name="open_interest",
@@ -170,3 +174,76 @@ class TestRejectionReason:
 
     def test_pass_carries_no_reason(self, registry):
         assert evaluate({"metric": "dau", "time_window": WINDOW}, registry).reason is None
+
+
+class TestScanBudget:
+    """扫描量预检 —— 这条规则以前在生产路径上从来没生效过。
+
+    钩子里写死了 ``estimated_rows=None``，于是 rules.py 里有规则、有测试，
+    而真实调用永远拿不到预估值。2026-08-27 改成由 evaluate 自己从注册表声明
+    与时间窗跨度算出来。这组测试钉住新行为。
+    """
+
+    def test_estimate_uses_declaration_and_window(self, registry):
+        spec = registry.get("dau")
+        # 10,000 行/天 × 20 天
+        assert estimate_scan_rows({"time_window": WINDOW}, spec) == 200_000
+
+    def test_estimate_ignores_dimension_count(self, registry):
+        """维度个数不进公式：列存下多切一维是多读一列，不是多读一批行。"""
+        spec = registry.get("dau")
+        a = estimate_scan_rows({"time_window": WINDOW}, spec)
+        b = estimate_scan_rows({"time_window": WINDOW, "dimensions": ["market", "channel"]}, spec)
+        assert a == b
+
+    def test_long_window_exceeds_budget_and_is_blocked(self, registry):
+        """10,000 行/天 × 200 天 = 200 万 > 上限 100 万。"""
+        long_window = {"start": "2026-01-01", "end": "2026-07-20"}
+        verdict = evaluate({"metric": "dau", "time_window": long_window}, registry)
+        assert verdict.code == REJECT_SCAN
+        assert "缩小时间窗" in verdict.reason
+
+    def test_missing_rows_per_day_is_undecidable_and_denied(self):
+        """声明了上限却没声明 rows_per_day —— 判定不了当不通过。
+
+        反过来做（当成"没有上限"）会让填不全的注册表静默变成没有扫描限制，
+        正是这套门禁要消灭的失效方式。
+        """
+        reg = MetricRegistry([
+            MetricSpec(name="m", dimensions=frozenset({"d"}), max_scan_rows=1000),
+        ])
+        verdict = evaluate({"metric": "m", "time_window": WINDOW}, reg)
+        assert verdict.code == REJECT_SCAN
+        assert "rows_per_day" in verdict.reason
+
+    def test_no_declared_limit_means_no_check(self):
+        """没声明 max_scan_rows = 没人要求限额，放行。"""
+        reg = MetricRegistry([
+            MetricSpec(name="m", dimensions=frozenset({"d"}), rows_per_day=10**9),
+        ])
+        assert evaluate({"metric": "m", "time_window": WINDOW}, reg).code == PASSED
+
+    def test_point_in_time_metric_counts_one_day(self):
+        """存量类指标没有时间窗，按一个快照算。"""
+        reg = MetricRegistry([
+            MetricSpec(name="oi", dimensions=frozenset({"symbol"}),
+                       requires_time_window=False, rows_per_day=500, max_scan_rows=1000),
+        ])
+        assert evaluate({"metric": "oi"}, reg).code == PASSED
+
+    def test_caller_can_override_with_a_real_estimate(self, registry):
+        """调用方真做了 EXPLAIN 时可以传进来覆盖推算值。"""
+        verdict = evaluate({"metric": "dau", "time_window": WINDOW}, registry,
+                           estimated_rows=5_000_000)
+        assert verdict.code == REJECT_SCAN
+
+    def test_explicit_none_skips_the_check(self, registry):
+        """显式传 None = 明确不做这项检查，与"漏传"要能区分开。"""
+        long_window = {"start": "2026-01-01", "end": "2026-07-20"}
+        assert evaluate({"metric": "dau", "time_window": long_window}, registry,
+                        estimated_rows=None).code == PASSED
+
+    def test_omitting_the_argument_does_not_skip_the_check(self, registry):
+        """漏传参数必须照常检查 —— 这正是以前那个 bug 的形状。"""
+        long_window = {"start": "2026-01-01", "end": "2026-07-20"}
+        assert evaluate({"metric": "dau", "time_window": long_window}, registry).code == REJECT_SCAN

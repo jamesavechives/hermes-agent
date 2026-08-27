@@ -1,22 +1,32 @@
 {
-  "_comment": "示例注册表。首批 10-12 个核心指标，口径/责任人/新鲜度在指标层维护，这里只放门禁需要的字段。",
+  "_comment": "示例注册表。首批 10-12 个核心指标，口径/责任人/新鲜度在指标层维护，这里只放门禁需要的字段。声明了 max_scan_rows 就必须同时声明 rows_per_day —— 否则扫描量预估不出来，门禁按「判定不了」拒绝该指标的全部查询。",
   "version": "example-0",
   "metrics": [
     {
       "name": "daily_active_users",
-      "dimensions": ["market", "channel"],
+      "dimensions": [
+        "market",
+        "channel"
+      ],
       "requires_time_window": true,
-      "max_scan_rows": 50000000
+      "max_scan_rows": 50000000,
+      "rows_per_day": 1200000
     },
     {
       "name": "spot_trade_volume",
-      "dimensions": ["symbol", "market"],
+      "dimensions": [
+        "symbol",
+        "market"
+      ],
       "requires_time_window": true,
-      "max_scan_rows": 200000000
+      "max_scan_rows": 200000000,
+      "rows_per_day": 8600000
     },
     {
       "name": "current_open_interest",
-      "dimensions": ["symbol"],
+      "dimensions": [
+        "symbol"
+      ],
       "requires_time_window": false
     }
   ]
