@@ -1,0 +1,6 @@
+name: bi-query
+version: "0.1.0"
+description: "受控指标层的查询工具（query_metric）。它是 bi-gate 要保护的对象，不是门禁的一部分——判定只能有一处，这里不重复校验。除了执行查询，它还把「自己真的执行了什么」记进审计，用于和门禁的判定记录对账：出现没有对应判定的执行，就说明这次调用没经过门禁。阶段一为桩数据后端，等发起人身份透传定了再换真实 StarRocks（只需替换 _backend_stub）。"
+author: "BIFU 技术研发中心"
+tools:
+  - query_metric

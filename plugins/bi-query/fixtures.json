@@ -1,0 +1,49 @@
+{
+  "_comment": "桩数据。阶段一用它把「模型 → 门禁 → 工具 → 审计」这条链跑通，不接真实库——理由见 README 第二节。每个指标给一组按维度切好的确定性数值，同样的入参永远返回同样的结果，这样评估集的回归才有意义。",
+  "version": "stub-0",
+  "rows_per_day": {
+    "daily_active_users": 1,
+    "spot_trade_volume": 8600,
+    "current_open_interest": 240
+  },
+  "data": {
+    "daily_active_users": {
+      "__total__":                 [{"dau": 128400}],
+      "market":                    [{"market": "CN", "dau": 61200},
+                                    {"market": "SG", "dau": 38700},
+                                    {"market": "HK", "dau": 28500}],
+      "channel":                   [{"channel": "app", "dau": 90100},
+                                    {"channel": "web", "dau": 38300}],
+      "market+channel":            [{"market": "CN", "channel": "app", "dau": 44300},
+                                    {"market": "CN", "channel": "web", "dau": 16900},
+                                    {"market": "SG", "channel": "app", "dau": 27100},
+                                    {"market": "SG", "channel": "web", "dau": 11600},
+                                    {"market": "HK", "channel": "app", "dau": 18700},
+                                    {"market": "HK", "channel": "web", "dau": 9800}]
+    },
+    "spot_trade_volume": {
+      "__total__":                 [{"volume_usdt": 4182000000}],
+      "symbol":                    [{"symbol": "BTC/USDT", "volume_usdt": 2410000000},
+                                    {"symbol": "ETH/USDT", "volume_usdt": 1120000000},
+                                    {"symbol": "SOL/USDT", "volume_usdt": 652000000}],
+      "market":                    [{"market": "CN", "volume_usdt": 1980000000},
+                                    {"market": "SG", "volume_usdt": 1440000000},
+                                    {"market": "HK", "volume_usdt": 762000000}],
+      "symbol+market":             [{"symbol": "BTC/USDT", "market": "CN", "volume_usdt": 1160000000},
+                                    {"symbol": "BTC/USDT", "market": "SG", "volume_usdt": 830000000},
+                                    {"symbol": "BTC/USDT", "market": "HK", "volume_usdt": 420000000},
+                                    {"symbol": "ETH/USDT", "market": "CN", "volume_usdt": 540000000},
+                                    {"symbol": "ETH/USDT", "market": "SG", "volume_usdt": 390000000},
+                                    {"symbol": "ETH/USDT", "market": "HK", "volume_usdt": 190000000},
+                                    {"symbol": "SOL/USDT", "market": "CN", "volume_usdt": 280000000},
+                                    {"symbol": "SOL/USDT", "market": "SG", "volume_usdt": 220000000},
+                                    {"symbol": "SOL/USDT", "market": "HK", "volume_usdt": 152000000}]
+    },
+    "current_open_interest": {
+      "__total__":                 [{"open_interest_usdt": 892000000}],
+      "symbol":                    [{"symbol": "BTC/USDT", "open_interest_usdt": 520000000},
+                                    {"symbol": "ETH/USDT", "open_interest_usdt": 248000000},
+                                    {"symbol": "SOL/USDT", "open_interest_usdt": 124000000}]
+    }
+  }
+}
