@@ -1,0 +1,5 @@
+{
+  "_comment": "签字记录。装配期检查只验字段齐全，验不了签字是真的 —— 那要靠 CODEOWNERS 在合并前把关。两者查的是同一件事的两端。",
+  "authorization": {"by": ["技术负责人", "合规"], "at": "2026-08-27", "ref": "https://github.com/decodeex/hermes-agent/pull/0"},
+  "facts": {"by": ["事实层责任人"], "at": "2026-08-27", "ref": "https://github.com/decodeex/hermes-agent/pull/0"}
+}

@@ -1,0 +1,13 @@
+# ⑤ fallback —— 业务方 + 合规，变更管控：中
+# CODEOWNERS: /profiles/*/fallback.yaml  @业务方 @合规
+#
+# 四项全是 null = 明确待定。写 null 和不写这个字段不一样：
+# 不写会直接报错（说明没人想过），写 null 只报「待定」（说明有人想过、还没定）。
+#
+# 空着的后果不是「没兜底」，是「助手自己编一套」—— 实测过两次，
+# 拒绝理由含糊时模型会把系统拦截说成「远端数据服务异常」。
+
+on_uncertain: null      # 不确定时：给已查到的部分 + 建议找谁核实
+on_timeout: null        # 超时：建议缩小时间范围重试
+refusal_script: null    # 拒答：说明是权限限制不是数据不存在 + 申请入口
+escalation: null        # 升级：转人工给谁

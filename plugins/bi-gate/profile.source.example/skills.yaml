@@ -1,0 +1,5 @@
+# ④ skills —— 技术负责人，变更管控：中
+# CODEOWNERS: /profiles/*/skills.yaml  @技术负责人
+dir: skills/
+# 自演化开着的话，画像写入限制（§八）还没做，等于没有约束。
+self_evolution: false

@@ -1,0 +1,39 @@
+# ② facts —— 事实层责任人批准，变更管控：重
+# CODEOWNERS: /profiles/*/facts.yaml  @事实层责任人
+#
+# 这里登记的就是「受控事实层」：没登记的指标一律拒绝。
+# 这条是有意的 —— 助手答「这个指标没登记」，好过它自己拼一个口径然后被当成官方数字。
+
+# 统计时区。Tex 的《BI + AI 需求梳理》里明确让用户选 UTC8 还是 UTC0，
+# 我们原先漏了这一项。默认值待业务方定，见《待确认事项》第三节。
+default_timezone: null
+
+metrics:
+  - name: daily_active_users
+    label: 日活用户数
+    dimensions: [market, channel]
+    requires_time_window: true
+    rows_per_day: 1200000
+    max_scan_rows: 50000000
+    owner: null        # 口径归谁 —— 待业务方给
+    source: null       # 哪张清洗表 / 哪个看板 —— 待业务方给
+
+  - name: spot_trade_volume
+    label: 现货成交量
+    dimensions: [symbol, market]
+    requires_time_window: true
+    rows_per_day: 8600000
+    # ⚠ 这个值和 authorization.yaml 的 session_scan_max 是矛盾的：
+    # 2 亿行 ≈ 23 天，但会话累计上限只有 1 亿 ≈ 11 天 ——
+    # 一个「合法」的单次查询会直接把整个会话额度用超，这个上限根本够不着。
+    # 装配期检查会点名（见 assemble_check 第 3 项）。两个数要一起定。
+    max_scan_rows: 200000000
+    owner: null
+    source: null
+
+  - name: current_open_interest
+    label: 当前未平仓量
+    dimensions: [symbol]
+    requires_time_window: false   # 快照类，不需要时间窗
+    owner: null
+    source: null

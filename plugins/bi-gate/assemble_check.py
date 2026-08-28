@@ -54,6 +54,7 @@ CI 检不了生产上那份 profile（不在仓库里，里面有凭据）；启
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -67,12 +68,16 @@ sys.path.insert(0, str(REPO))
 
 #: Agent Profile 的五块字段（系统 B §8.1 图 7）与当前声明位置的对应。
 #: 值为 None 表示这一块**目前没有任何声明位置**——不是"我们没查"，是"没地方写"。
-FIELD_SOURCES: Dict[str, Tuple[str, Optional[str]]] = {
-    "① persona":            ("身份与表达", None),  # 等 persona.yaml（§3.4）
-    "② facts":              ("受控事实层绑定", "BI_GATE_REGISTRY"),
-    "③ tools + action_max": ("工具与动作上限", "BI_GATE_TOOLS"),
-    "④ skills":             ("技能集与自演化开关", None),
-    "⑤ fallback":           ("交接与兜底", None),
+#: (说明, 运行时环境变量, 声明文件名)。
+#: 声明文件名写死、不从字段名推导 —— ``③ tools + action_max`` 对应的是
+#: ``authorization.yaml``，推导会得出 ``tools.yaml``。这种"看着能推出来"的映射
+#: 正是容易悄悄错的地方：第一版就是这么写的，实跑时才报「里面没有 tools.yaml」。
+FIELD_SOURCES: Dict[str, Tuple[str, Optional[str], str]] = {
+    "① persona":            ("身份与表达", None, "persona.yaml"),
+    "② facts":              ("受控事实层绑定", "BI_GATE_REGISTRY", "facts.yaml"),
+    "③ tools + action_max": ("工具与动作上限", "BI_GATE_TOOLS", "authorization.yaml"),
+    "④ skills":             ("技能集与自演化开关", None, "skills.yaml"),
+    "⑤ fallback":           ("交接与兜底", None, "fallback.yaml"),
 }
 
 
@@ -131,12 +136,21 @@ def load_declaration(profile: Path) -> Dict[str, Any]:
     cfg = profile / "config.yaml"
     if cfg.exists():
         config_text = cfg.read_text(encoding="utf-8")
+    manifest: Optional[Dict[str, Any]] = None
+    mpath = profile / ".generated.json"
+    if mpath.exists():
+        try:
+            loaded = json.loads(mpath.read_text(encoding="utf-8"))
+            manifest = loaded if isinstance(loaded, dict) else None
+        except ValueError:
+            manifest = None
     return {
         "profile": profile.name,
         "path": profile,
         "env": env,
         "config_text": config_text,
         "approvals": profile / "approvals.json",
+        "manifest": manifest,
     }
 
 
@@ -188,10 +202,32 @@ def check_fields(decl: Dict[str, Any]) -> List[Result]:
     """
     out: List[Result] = []
     env = decl["env"]
-    for field, (what, key) in FIELD_SOURCES.items():
+    manifest = decl.get("manifest")
+
+    # profile 由 build_profile.py 生成时，五块都有落点了 —— 而且**manifest 存在
+    # 本身就是字段齐全的证据**：生成器缺字段直接报错、不产出任何文件，所以能生成
+    # 出 manifest，就说明五个声明文件的必填字段都在。
+    #
+    # 这样这一项不需要在装配期再解析一次 YAML —— 门禁这侧继续保持零第三方依赖（§9.1）。
+    # 注意「齐全」不等于「已确定」：写成 null 的待定项由 build_profile.py 单独报，
+    # 不在这里，因为待定不该拦部署。
+    if manifest:
+        src = Path(str(manifest.get("source_dir") or ""))
+        readable = src.is_dir()
+        for field, (what, _key, fname) in FIELD_SOURCES.items():
+            if readable and not (src / fname).exists():
+                out.append(Result(f"{field}（{what}）", False,
+                                  f"manifest 指向 {src}，但里面没有 {fname} —— manifest 过期了"))
+            else:
+                where = f"{fname}" + ("" if readable else "（声明目录不在本机，按 manifest 认定）")
+                out.append(Result(f"{field}（{what}）", True, f"{where}，生成时已验字段齐全"))
+        return out
+
+    for field, (what, key, _fname) in FIELD_SOURCES.items():
         if key is None:
             out.append(Result(f"{field}（{what}）", None,
-                              "当前声明格式里没有这一块的位置 —— 等五个声明文件（设计方案 §3.4）"))
+                              "这个 profile 不是 build_profile.py 生成的，这一块没有落点 —— "
+                              "改用五个声明文件（设计方案 §3.4）后就查得了"))
         elif env.get(key, "").strip():
             out.append(Result(f"{field}（{what}）", True, f"{key} 已声明"))
         else:
@@ -383,11 +419,66 @@ def check_documented_command(decl: Dict[str, Any], timeout: float = 60.0) -> Lis
 
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# ⑥ 生成物没被手改
+# ---------------------------------------------------------------------------
+
+def check_not_hand_edited(decl: Dict[str, Any]) -> List[Result]:
+    """运行时文件必须与 ``.generated.json`` 里记的 hash 一致。
+
+    设计方案 §3.3 写「散落的运行时文件由工具生成，不允许手改 —— 手改能绕过审批，
+    那这一层就白做了」。在这一项做出来之前，那句话**只是一句话**：谁都能直接改
+    ``.env`` 把 ``BI_GATE_TOOLS`` 加上一个工具，没有任何环节会发现。
+
+    CODEOWNERS 管的是「改声明文件要谁点头」，管不到运行时目录里的文件。
+    所以「不许手改」的落点只能在这里：部署前比一次 hash，对不上就不许部署。
+
+    **没有 manifest 不判失败，判「查不了」**：可能这个 profile 还是手工建的
+    （生成工具是 2026-08-27 才有的，在此之前的 profile 都没有 manifest）。
+    但查不了不算通过 —— 结论里会单独点名。
+    """
+    path: Path = decl["path"] / ".generated.json"
+    if not path.exists():
+        return [Result("生成物未被手改", None,
+                       "没有 .generated.json —— 这个 profile 不是用 build_profile.py 生成的，"
+                       "无法确认运行时文件有没有被手改")]
+    data, err = _load_json(str(path))
+    if not isinstance(data, dict) or "files" not in data:
+        return [Result("生成物未被手改", False, err or ".generated.json 格式不对")]
+
+    out: List[Result] = []
+    drifted: List[str] = []
+    missing: List[str] = []
+    for name, meta in sorted((data.get("files") or {}).items()):
+        f = decl["path"] / name
+        if not f.exists():
+            missing.append(name)
+            continue
+        try:
+            actual = hashlib.sha256(f.read_text(encoding="utf-8").encode("utf-8")).hexdigest()
+        except Exception as exc:
+            drifted.append(f"{name}（读不了：{exc}）")
+            continue
+        if actual != (meta or {}).get("sha256"):
+            drifted.append(name)
+
+    if missing:
+        out.append(Result("生成物齐全", False, f"manifest 里有、目录里没有：{'、'.join(missing)}"))
+    if drifted:
+        out.append(Result("生成物未被手改", False,
+                          f"这些文件和声明生成的结果对不上，说明被手改过（绕过了审批）："
+                          f"{'、'.join(drifted)}。重新跑 build_profile.py，或把改动写回声明文件"))
+    if not missing and not drifted:
+        out.append(Result("生成物未被手改", True, f"{len(data.get('files') or {})} 个文件 hash 一致"))
+    return out
+
+
 SECTIONS = [
     ("① 五块字段齐全", check_fields),
     ("② 审批签字齐全", check_approvals),
     ("③ 声明之间自相容", check_self_consistency),
     ("④ action_policy 可解析", check_policy_parses),
+    ("⑥ 生成物没被手改", check_not_hand_edited),
 ]
 
 
