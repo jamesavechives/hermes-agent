@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from datetime import date
-from typing import Any, Mapping, Optional, Sequence
+from typing import Any, Mapping, Optional, Sequence, Tuple
 
 
 # ---------------------------------------------------------------------------
@@ -24,6 +24,8 @@ from typing import Any, Mapping, Optional, Sequence
 REJECT_UNKNOWN_METRIC = "rejected_unknown_metric"
 REJECT_BAD_PARAM = "rejected_bad_param"
 REJECT_NO_TIME_WINDOW = "rejected_no_time_window"
+REJECT_TIMEZONE = "rejected_timezone"
+
 REJECT_SCAN = "rejected_scan"
 #: 单次没超、但本会话累计超了。与 REJECT_SCAN 分开，因为处置方式完全不同：
 #: 单次超限缩小时间窗就能过，累计超限缩不出来——已经拿走的数据不会退回去。
@@ -101,10 +103,20 @@ class MetricSpec:
 
 
 class MetricRegistry:
-    """指标注册表。首批只装 10–12 个核心指标，范围可缩、准出标准不降。"""
+    """指标注册表。首批只装 10–12 个核心指标，范围可缩、准出标准不降。
 
-    def __init__(self, specs: Sequence[MetricSpec]) -> None:
+    ``default_timezone`` 是**统计时区**的默认值。这一项原先整个漏了 ——
+    Tex 的《BI + AI 需求梳理》里明确让用户在 UTC8 和 UTC0 之间选，我们的时间窗
+    却只有起止日期。「上周」在两个时区下是两段不同的数据，而答出来的数**看着
+    一样对**，这正是本项目一路在防的那种失效。
+
+    ``None`` 表示业务方还没定。后果见 :func:`resolve_timezone`。
+    """
+
+    def __init__(self, specs: Sequence[MetricSpec],
+                 default_timezone: Optional[str] = None) -> None:
         self._by_name = {s.name: s for s in specs}
+        self.default_timezone = default_timezone
 
     def get(self, name: str) -> Optional[MetricSpec]:
         return self._by_name.get(name)
@@ -189,6 +201,101 @@ def check_time_window(time_window: Any, spec: MetricSpec) -> Verdict:
             metric=spec.name,
         )
     return ALLOW
+
+
+#: 固定偏移写法：UTC、UTC+8、UTC-5、UTC+05:30。
+_UTC_OFFSET = re.compile(r"^UTC(?:([+-])(\d{1,2})(?::([0-5]\d))?)?$")
+
+
+def normalize_timezone(value: Any) -> Optional[str]:
+    """把时区字符串规范化；认不出来返回 None。
+
+    接受两种写法：固定偏移（``UTC+8``）和 IANA 名（``Asia/Shanghai``）。
+    IANA 用标准库 ``zoneinfo`` 校验 —— 是标准库，不违反「零第三方依赖」。
+
+    **认不出来一律返回 None，绝不回落到某个默认值。** 时区写错了还照常返回数据，
+    是最难发现的一类错：数字看着完全正常，只是差了几小时。和"相对时间窗一律拒绝"
+    是同一条判断。
+    """
+    if not isinstance(value, str):
+        return None
+    s = value.strip()
+    if not s:
+        return None
+
+    m = _UTC_OFFSET.match(s.upper())
+    if m:
+        sign, hh, mm = m.groups()
+        if sign is None:
+            return "UTC"
+        hours, minutes = int(hh), int(mm or 0)
+        if hours > 14 or (hours == 14 and minutes > 0):
+            return None
+        return f"UTC{sign}{hours:02d}:{minutes:02d}"
+
+    try:
+        from zoneinfo import ZoneInfo  # 标准库（3.9+）
+        ZoneInfo(s)
+    except Exception:
+        return None
+    return s
+
+
+def resolve_timezone(args: Mapping[str, Any], spec: MetricSpec,
+                     registry: "MetricRegistry") -> Tuple[Optional[str], str, Verdict]:
+    """定出这次查询按哪个时区算。返回 (时区, 来源, 判定)。
+
+    优先级：**调用显式指定 > 注册表默认**。
+
+    两者都没有就拒绝，不猜。这条和「相对时间窗一律拒绝」同源：都是"这个窗口
+    到底指哪段数据说不准"。默认成 UTC8 看着体贴，实际是把一个没人定过的口径
+    悄悄写进了每一个答案里。
+
+    拒绝理由里刻意给了**两条出路**（这次指定，或让业务方定默认值），
+    对应 Tex 说的「让用户做选择题而不是问答题」。
+
+    不需要时间窗的指标（快照类）跳过这一项 —— 没有窗口就没有时区歧义。
+    """
+    if not spec.requires_time_window:
+        return None, "not_applicable", ALLOW
+
+    window = args.get("time_window")
+    raw = window.get("timezone") if isinstance(window, Mapping) else None
+    if raw is None:
+        raw = args.get("timezone")
+
+    if raw is not None:
+        tz = normalize_timezone(raw)
+        if tz is None:
+            return None, "call", _deny(
+                REJECT_TIMEZONE,
+                f"时区 {raw!r} 认不出来。写法：UTC+8 这样的固定偏移，"
+                "或 Asia/Shanghai 这样的 IANA 名。写错的时区不会被当成默认值处理 —— "
+                "那样返回的数字看着正常，只是差了几小时。",
+                metric=spec.name, timezone_raw=raw,
+            )
+        return tz, "call", ALLOW
+
+    default = normalize_timezone(registry.default_timezone)
+    if default is not None:
+        return default, "registry_default", ALLOW
+
+    if registry.default_timezone is not None:
+        return None, "registry_default", _deny(
+            REJECT_TIMEZONE,
+            f"注册表里的默认时区 {registry.default_timezone!r} 认不出来 —— "
+            "这是配置问题，请联系事实层责任人，不要靠调用侧绕过。",
+            metric=spec.name, timezone_raw=registry.default_timezone,
+        )
+
+    return None, "undetermined", _deny(
+        REJECT_TIMEZONE,
+        f"指标 {spec.name} 的统计时区没定。同一个时间窗在 UTC+8 和 UTC+0 下是"
+        "两段不同的数据，不指定就答出来，数字看着对、实际可能差几小时。"
+        '两条出路：这次调用里显式写 time_window.timezone（如 "UTC+8"），'
+        "或者请业务方给注册表定一个默认时区。",
+        metric=spec.name,
+    )
 
 
 def estimate_scan_rows(args: Mapping[str, Any], spec: MetricSpec) -> Any:
@@ -564,4 +671,16 @@ def evaluate(
     ):
         if verdict.blocked:
             return verdict
+
+    # 时区放在时间窗**之后**：窗口本身格式不对时，先说窗口的事更可操作；
+    # 窗口没问题了，才轮到"这个窗口按哪个时区算"。
+    timezone, tz_source, verdict = resolve_timezone(args, spec, registry)
+    if verdict.blocked:
+        return verdict
+
+    # 放行也要把时区带出去 —— 审计里必须记下这次是按哪个时区算的、这个值从哪来。
+    # 不记的话，事后对账时「这个数为什么和看板差一天」就查不出来了。
+    if timezone is not None:
+        return Verdict(code=PASSED,
+                       detail={"timezone": timezone, "timezone_source": tz_source})
     return ALLOW

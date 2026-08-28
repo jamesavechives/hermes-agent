@@ -117,8 +117,15 @@ def _load_registry() -> MetricRegistry:
         except (KeyError, TypeError) as exc:
             # 单条坏掉不牵连整表，但要吵出来 —— 静默跳过等于悄悄放宽门禁。
             logger.error("bi-gate: 注册表条目非法，已跳过：%r（%s）", item, exc)
-    logger.info("bi-gate: 载入 %d 个指标", len(specs))
-    return MetricRegistry(specs)
+    # 统计时区。None = 业务方还没定 —— 那样需要时间窗的指标必须在调用里显式带
+    # 时区，否则被 rejected_timezone 拦下。见 rules.resolve_timezone。
+    default_tz = raw.get("default_timezone")
+    if default_tz is None:
+        logger.warning(
+            "bi-gate: 注册表没有 default_timezone —— 需要时间窗的指标必须在调用里"
+            "显式指定时区，否则会被拦。这一项待业务方定。")
+    logger.info("bi-gate: 载入 %d 个指标，默认时区 %r", len(specs), default_tz)
+    return MetricRegistry(specs, default_timezone=default_tz)
 
 
 _registry: Optional[MetricRegistry] = None
@@ -331,6 +338,12 @@ def _audit(
         # 而不是只能看到被拦的那些。只记拒绝等于只看得见失败的越权尝试。
         "action_level": action_level,
         "action_max": action_max,
+        # 统计时区提到顶层，不留在 detail 里。事后对账最常问的一句就是
+        # 「这个数按哪个时区算的」—— 嵌在 detail 里要先解一层 JSON 才查得到。
+        # timezone_source 同样要记：调用自己指定的，和吃了注册表默认值的，
+        # 出了口径争议时责任完全不同。
+        "timezone": (verdict.detail or {}).get("timezone"),
+        "timezone_source": (verdict.detail or {}).get("timezone_source"),
         "detail": dict(verdict.detail) if verdict.detail else None,
         **{k: v for k, v in context.items() if v},
     }

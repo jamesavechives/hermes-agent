@@ -51,6 +51,7 @@ def gate(tmp_path, monkeypatch):
     registry.write_text(
         json.dumps(
             {
+                "default_timezone": "UTC+8",
                 "metrics": [
                     {
                         "name": "dau",

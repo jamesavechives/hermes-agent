@@ -43,10 +43,17 @@ evaluate = _rules.evaluate
 estimate_scan_rows = _rules.estimate_scan_rows
 
 
+# 统计时区在 2026-08-27 补进门禁：需要时间窗的指标必须能定出时区，否则拒绝
+# （见 test_bi_gate_timezone.py）。下面这些用例测的是别的规则，给它们一个明确的
+# 时区，免得每条都被时区这一关先拦下来 —— 那样测的就不是它们要测的东西了。
+TZ = "UTC+8"
+
+
 @pytest.fixture
 def registry() -> MetricRegistry:
     return MetricRegistry(
-        [
+        default_timezone=TZ,
+        specs=[
             MetricSpec(
                 name="dau",
                 dimensions=frozenset({"market", "channel"}),
@@ -211,7 +218,7 @@ class TestScanBudget:
         """
         reg = MetricRegistry([
             MetricSpec(name="m", dimensions=frozenset({"d"}), max_scan_rows=1000),
-        ])
+        ], default_timezone=TZ)
         verdict = evaluate({"metric": "m", "time_window": WINDOW}, reg)
         assert verdict.code == REJECT_SCAN
         assert "rows_per_day" in verdict.reason
@@ -220,7 +227,7 @@ class TestScanBudget:
         """没声明 max_scan_rows = 没人要求限额，放行。"""
         reg = MetricRegistry([
             MetricSpec(name="m", dimensions=frozenset({"d"}), rows_per_day=10**9),
-        ])
+        ], default_timezone=TZ)
         assert evaluate({"metric": "m", "time_window": WINDOW}, reg).code == PASSED
 
     def test_point_in_time_metric_counts_one_day(self):

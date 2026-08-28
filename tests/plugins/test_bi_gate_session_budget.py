@@ -43,7 +43,7 @@ def gate(tmp_path, monkeypatch):
     """一个 profile：dau 每天 100 万行，单次上限 5000 万（约 50 天）。"""
     registry = tmp_path / "registry.json"
     registry.write_text(
-        json.dumps({"metrics": [{
+        json.dumps({"default_timezone": "UTC+8", "metrics": [{
             "name": "dau",
             "dimensions": ["market"],
             "requires_time_window": True,

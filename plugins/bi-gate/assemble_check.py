@@ -338,6 +338,25 @@ def check_self_consistency(decl: Dict[str, Any]) -> List[Result]:
         else:
             out.append(Result("注册表扫描量声明完整", True, f"{len(metrics)} 个指标"))
 
+        # 统计时区。需要时间窗的指标才受影响 —— 快照类指标没有窗口，就没有歧义。
+        needs_window = [m.get("name") for m in metrics
+                        if m.get("requires_time_window", True)]
+        tz = registry.get("default_timezone")
+        if not needs_window:
+            pass
+        elif tz is None:
+            out.append(Result("统计时区", None,
+                              f"default_timezone 未定 —— {len(needs_window)} 个指标需要时间窗，"
+                              f"它们的调用必须自带 timezone，否则会被拦。这一项待业务方定"))
+        else:
+            rules = _rules()
+            if rules.normalize_timezone(tz) is None:
+                out.append(Result("统计时区", False,
+                                  f"default_timezone={tz!r} 认不出来 —— 需要时间窗的指标"
+                                  f"全都会被拒，除非每次调用自带时区"))
+            else:
+                out.append(Result("统计时区", True, rules.normalize_timezone(tz)))
+
     return out
 
 

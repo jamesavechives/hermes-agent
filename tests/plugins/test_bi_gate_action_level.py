@@ -238,7 +238,7 @@ class TestPolicyLoading:
     @pytest.fixture
     def gate(self, tmp_path, monkeypatch):
         registry = tmp_path / "registry.json"
-        registry.write_text(json.dumps({"metrics": [
+        registry.write_text(json.dumps({"default_timezone": "UTC+8", "metrics": [
             {"name": "dau", "dimensions": ["market"], "requires_time_window": True}]}),
             encoding="utf-8")
         monkeypatch.setenv("BI_GATE_REGISTRY", str(registry))
@@ -312,7 +312,7 @@ class TestOnTheRealDispatchPath:
     @pytest.fixture
     def dispatch(self, tmp_path, monkeypatch):
         registry = tmp_path / "registry.json"
-        registry.write_text(json.dumps({"metrics": [
+        registry.write_text(json.dumps({"default_timezone": "UTC+8", "metrics": [
             {"name": "dau", "dimensions": ["market", "channel"], "requires_time_window": True}]}),
             encoding="utf-8")
         policy = tmp_path / "policy.json"
