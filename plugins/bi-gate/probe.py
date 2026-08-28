@@ -44,6 +44,32 @@ CANARY_METRIC = "__bi_gate_canary_never_register__"
 #: 探针发出的调用长这样。缺时间窗 + 指标未注册，两条都该拦，任一条生效即算存活。
 CANARY_ARGS = {"metric": CANARY_METRIC}
 
+#: 探针自己绑的会话身份。
+#:
+#: 2026-08-28 加了身份透传之后，探针（从定时器跑，没有会话）撞的是
+#: ``rejected_origin_not_allowed`` —— **它依然报"门禁存活"，但测的已经不是
+#: 它声称要测的那件事了**：身份在最前面就把它挡下，指标注册、时间窗那几条
+#: 规则一条都没跑到。
+#:
+#: 这是「测试因为错误的原因通过」的又一例，而且这次是我自己加的功能造成的：
+#: 加一层新的前置检查，会让所有原本测后面几层的东西**静默地**改成测新那层。
+#: 所以探针像真实网关那样绑一个会话，走完整条链路。
+PROBE_PLATFORM_ID = "__bi_gate_probe__"
+
+
+def _bind_probe_session():
+    """给探针绑一个会话身份，让它能走到身份之后的规则。
+
+    返回 tokens（给 clear_session_vars 用），拿不到会话上下文时返回 None ——
+    那种情况下探针会撞在身份那一层，依然能判断门禁存活，但要在结果里说清楚。
+    """
+    try:
+        from gateway.session_context import set_session_vars
+        return set_session_vars(platform="probe", user_id=PROBE_PLATFORM_ID,
+                                user_name="门禁存活探针", session_id="bi-gate-probe")
+    except Exception:      # noqa: BLE001
+        return None
+
 ALIVE = "alive"
 GATE_DOWN = "gate_down"
 PROBE_ERROR = "probe_error"
@@ -73,13 +99,33 @@ def probe(dispatch: Optional[Any] = None) -> ProbeResult:
             # 连派发函数都导不进来，说明环境本身有问题，不是门禁的锅。
             return ProbeResult(PROBE_ERROR, f"无法导入 handle_function_call：{exc}")
 
+    # 绑一个会话身份再发探针调用。不绑的话，身份那一层会在最前面就把它挡下，
+    # 探针依然报"存活"，但**测的已经不是它声称要测的那件事** —— 指标注册、
+    # 时间窗、扫描量那几条规则一条都没跑到。见 PROBE_PLATFORM_ID 的说明。
+    tokens = _bind_probe_session()
+    bound = tokens is not None
     try:
         raw = dispatch("query_metric", dict(CANARY_ARGS))
     except Exception as exc:
         return ProbeResult(PROBE_ERROR, f"派发探针调用时异常：{exc}")
+    finally:
+        if tokens is not None:
+            try:
+                from gateway.session_context import clear_session_vars
+                clear_session_vars(tokens)
+            except Exception:      # noqa: BLE001 —— 清理失败不该盖住探针结论
+                pass
 
     if _looks_blocked(raw):
-        return ProbeResult(ALIVE, "探针调用已被拦截，门禁在工作")
+        if not bound:
+            # 说清楚这一轮探到的深度，不要让"存活"看起来比实际更有力。
+            return ProbeResult(
+                ALIVE,
+                "探针调用已被拦截，门禁在工作。"
+                "但这一轮没能绑上会话身份，所以很可能拦在身份那一层 —— "
+                "后面的指标/时间窗/扫描量规则这次没验到")
+        return ProbeResult(ALIVE, "探针调用已被拦截，门禁在工作（已绑会话身份，"
+                                  "走到了身份之后的规则）")
     return ProbeResult(
         GATE_DOWN,
         "探针调用没有被拦截 —— 此刻任何 query_metric 都能穿过门禁。"

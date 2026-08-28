@@ -25,6 +25,9 @@ REJECT_UNKNOWN_METRIC = "rejected_unknown_metric"
 REJECT_BAD_PARAM = "rejected_bad_param"
 REJECT_NO_TIME_WINDOW = "rejected_no_time_window"
 REJECT_TIMEZONE = "rejected_timezone"
+#: 问的时间段整段没有数据。**这不是"查出来是空的"，是"根本没这段数据"** ——
+#: 两者对用户的含义完全不同：前者是业务上真的没发生，后者是数仓没跑到。
+REJECT_NO_DATA_IN_RANGE = "rejected_no_data_in_range"
 
 REJECT_SCAN = "rejected_scan"
 #: 单次没超、但本会话累计超了。与 REJECT_SCAN 分开，因为处置方式完全不同：
@@ -100,6 +103,10 @@ class MetricSpec:
     #: 让模型报预估等于把强制交给被约束方，和「配置里的清单不是强制」是同一类错误。
     #: 声明了 max_scan_rows 却没声明这个，会让扫描预检判不了（见 estimate_scan_rows）。
     rows_per_day: Optional[int] = None
+    #: 这个指标实际有数据的日期范围（YYYY-MM-DD，取自底表）。
+    #: None 表示不知道 —— 那就不做新鲜度检查（不能凭空拒，也不能假装有数据）。
+    data_start: Optional[str] = None
+    data_end: Optional[str] = None
 
 
 class MetricRegistry:
@@ -173,16 +180,33 @@ def check_dimensions(dimensions: Any, spec: MetricSpec) -> Verdict:
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2})?)?$")
 
 
-def check_time_window(time_window: Any, spec: MetricSpec) -> Verdict:
-    """时间窗必填且必须是绝对区间。"""
+def check_time_window(time_window: Any, spec: MetricSpec,
+                      received_keys: Any = None) -> Verdict:
+    """时间窗必填且必须是绝对区间。
+
+    ``received_keys`` 是这次调用实际传了哪些参数名。**只传名字，不传值。**
+
+    为什么要有它：2026-08-28 真跑模型时，同一个问题连撞 7 次
+    ``rejected_no_time_window`` —— 拒因说了期望的格式，但没说它实际传了什么，
+    于是模型只能一次次瞎试参数名。**拒因里只有"应该是什么"、没有"你给的是
+    什么"，模型就没法定位自己错在哪。** 加上收到的键名之后，差异一眼可见。
+
+    只放键名不放值：值里可能有用户问题的原文，那不该进审计和模型上下文两次。
+    """
     if not spec.requires_time_window:
         return ALLOW
     if not isinstance(time_window, Mapping):
+        got = ""
+        if received_keys:
+            got = f"（这次调用传的参数是：{'、'.join(sorted(str(k) for k in received_keys))}）"
         return _deny(
             REJECT_NO_TIME_WINDOW,
             f"指标 {spec.name} 必须带时间窗，形如 "
-            '{"start": "2026-08-01", "end": "2026-08-21"}。无界查询一律不放行。',
+            '{"start": "2026-08-01", "end": "2026-08-21"}。无界查询一律不放行。'
+            f"{got}"
+            "时间窗要放在 time_window 这个参数里，不是拆成两个顶层参数。",
             metric=spec.name,
+            received_keys=sorted(str(k) for k in (received_keys or [])),
         )
     start, end = time_window.get("start"), time_window.get("end")
     for label, value in (("start", start), ("end", end)):
@@ -200,6 +224,76 @@ def check_time_window(time_window: Any, spec: MetricSpec) -> Verdict:
             f"时间窗起止颠倒：start={start} 晚于 end={end}。",
             metric=spec.name,
         )
+    return ALLOW
+
+
+def check_data_freshness(time_window: Any, spec: MetricSpec) -> Verdict:
+    """问的时间段里到底有没有数据。
+
+    为什么这条必须做在门禁里，而不是"查出来是空的就算了"
+    ----------------------------------------------------
+    2026-08-28 查生产：整条数仓链路的 ETL 停在 **2026-07-17**，而业务库还在写。
+    也就是说这一刻问「最近 7 天的日活」，底表里那 7 天一行都没有。
+
+    如果不拦，会发生两件事之一，都比报错糟：
+
+    * 返回空结果 —— 模型很可能解释成「这几天没有活跃用户」，那是**假的业务结论**；
+    * 模型自己把时间窗改到有数据的范围，然后把 7 月的数字当成上周的报给用户。
+
+    **「没有数据」和「数据是 0」必须分开。** 前者是数仓的问题，后者是业务事实。
+    助手可以说不知道，不可以把不知道说成 0。
+
+    三种情形：
+
+    ===================== ==========================================
+    问的窗口 vs 数据范围   处理
+    ===================== ==========================================
+    完全没有交集           拒绝，并告诉用户数据截止到哪天
+    部分超出               放行，但在 detail 里标出实际覆盖到哪天，
+                          让回答里能说清楚
+    完全在范围内           放行
+    ===================== ==========================================
+
+    ``data_end`` 未声明（None）时不做这项检查 —— 不知道就不判，
+    但那样就没有任何东西拦得住陈旧数据，所以生成器一定会把它填上。
+    """
+    if not spec.requires_time_window or spec.data_end is None:
+        return ALLOW
+    if not isinstance(time_window, Mapping):
+        return ALLOW          # 时间窗本身的合法性由 check_time_window 负责
+    start, end = time_window.get("start"), time_window.get("end")
+    if not isinstance(start, str) or not isinstance(end, str):
+        return ALLOW
+
+    # 只比日期部分。底表可能是小时粒度，但"有没有这一天的数据"用日期比就够，
+    # 而且不会因为 "2026-07-16" 和 "2026-07-16 08:00:00" 的格式差异误判。
+    d_start = (spec.data_start or "")[:10]
+    d_end = spec.data_end[:10]
+    q_start, q_end = start[:10], end[:10]
+
+    if q_start > d_end or (d_start and q_end < d_start):
+        return _deny(
+            REJECT_NO_DATA_IN_RANGE,
+            f"指标 {spec.name} 在 {q_start} ~ {q_end} 这段时间**没有数据**（不是 0，是没有）。"
+            f"底表实际有数据的范围是 {d_start or '未知'} ~ {d_end}。"
+            f"请把时间窗改到这个范围内；如果你要的就是最近的数据，"
+            f"那说明数仓还没跑到这里 —— 这是数据侧的问题，不要用旧数据代替。",
+            metric=spec.name, data_start=d_start, data_end=d_end,
+            asked_start=q_start, asked_end=q_end,
+        )
+
+    if q_end > d_end or (d_start and q_start < d_start):
+        # 部分超出：放行，但把实际覆盖范围带进 detail，回答里要说清楚。
+        covered_start = max(q_start, d_start) if d_start else q_start
+        covered_end = min(q_end, d_end)
+        return Verdict(code=PASSED, detail={
+            "data_coverage": "partial",
+            "asked": f"{q_start}~{q_end}",
+            "covered": f"{covered_start}~{covered_end}",
+            "data_end": d_end,
+            "note": f"这个指标的数据只到 {d_end}，超出的部分没有数据，"
+                    f"回答里必须说明实际统计到哪天，不能当成完整区间。",
+        })
     return ALLOW
 
 
@@ -663,7 +757,11 @@ def evaluate(
 
     for verdict in (
         check_dimensions(args.get("dimensions"), spec),
-        check_time_window(args.get("time_window"), spec),
+        check_time_window(args.get("time_window"), spec, received_keys=list(args)),
+        # 新鲜度排在时间窗**之后**、扫描量之前：窗口格式不对时先说格式；
+        # 格式对了才轮到「这段时间到底有没有数据」；而这段没数据的话，
+        # 再去算扫描量就没意义了。
+        check_data_freshness(args.get("time_window"), spec),
         check_scan_budget(
             estimate_scan_rows(args, spec) if estimated_rows is _DERIVE else estimated_rows,
             spec,
@@ -680,7 +778,16 @@ def evaluate(
 
     # 放行也要把时区带出去 —— 审计里必须记下这次是按哪个时区算的、这个值从哪来。
     # 不记的话，事后对账时「这个数为什么和看板差一天」就查不出来了。
+    detail: dict = {}
     if timezone is not None:
-        return Verdict(code=PASSED,
-                       detail={"timezone": timezone, "timezone_source": tz_source})
-    return ALLOW
+        detail["timezone"] = timezone
+        detail["timezone_source"] = tz_source
+
+    # 部分超出数据范围时，check_data_freshness 放行但带回覆盖范围。
+    # **那条 detail 必须一路带到这里**，否则回答里说不清"实际统计到哪天" ——
+    # 和时区那次是同一个坑：好不容易算出来的 detail 在后续步骤里被丢掉。
+    coverage = check_data_freshness(args.get("time_window"), spec)
+    if coverage.detail:
+        detail.update(coverage.detail)
+
+    return Verdict(code=PASSED, detail=detail or None) if detail else ALLOW

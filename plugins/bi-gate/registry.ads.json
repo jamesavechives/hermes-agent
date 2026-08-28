@@ -1,0 +1,1998 @@
+{
+  "default_timezone": null,
+  "generated_from": "ads（StarRocks 元数据）",
+  "metrics": [
+    {
+      "name": "asset_daily_stat.asset_balance_gt_0_uv",
+      "description": "资产余额大于0的用户数",
+      "unit": "人/笔",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_asset_daily_stat_di",
+        "column": "asset_balance_gt_0_uv",
+        "time_column": "bizdate",
+        "table_description": "全站资沉统计"
+      },
+      "freshness": {
+        "data_start": "2026-05-31",
+        "data_end": "2026-06-23",
+        "etl_time": "2026-06-24 08:49:44"
+      }
+    },
+    {
+      "name": "asset_daily_stat.total_asset_balance",
+      "description": "资产总额",
+      "unit": "",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_asset_daily_stat_di",
+        "column": "total_asset_balance",
+        "time_column": "bizdate",
+        "table_description": "全站资沉统计"
+      },
+      "freshness": {
+        "data_start": "2026-05-31",
+        "data_end": "2026-06-23",
+        "etl_time": "2026-06-24 08:49:44"
+      }
+    },
+    {
+      "name": "bd_refer_trade_daily_stat.DAUC",
+      "description": "合约交易人数",
+      "unit": "人/笔",
+      "dimensions": [
+        "bd_name"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 5,
+      "max_scan_rows": 200,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_bd_refer_trade_daily_stat_di",
+        "column": "DAUC",
+        "time_column": "bizdate",
+        "table_description": "BD拉新、交易、返佣、出金日报"
+      },
+      "freshness": {
+        "data_start": "2026-04-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "bd_refer_trade_daily_stat.FTD",
+      "description": "首次入金人数",
+      "unit": "人/笔",
+      "dimensions": [
+        "bd_name"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 5,
+      "max_scan_rows": 200,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_bd_refer_trade_daily_stat_di",
+        "column": "FTD",
+        "time_column": "bizdate",
+        "table_description": "BD拉新、交易、返佣、出金日报"
+      },
+      "freshness": {
+        "data_start": "2026-04-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "bd_refer_trade_daily_stat.FTTC",
+      "description": "首次合约交易人数",
+      "unit": "人/笔",
+      "dimensions": [
+        "bd_name"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 5,
+      "max_scan_rows": 200,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_bd_refer_trade_daily_stat_di",
+        "column": "FTTC",
+        "time_column": "bizdate",
+        "table_description": "BD拉新、交易、返佣、出金日报"
+      },
+      "freshness": {
+        "data_start": "2026-04-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "bd_refer_trade_daily_stat.commission_u",
+      "description": "合约交易返佣金额",
+      "unit": "USDT",
+      "dimensions": [
+        "bd_name"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 5,
+      "max_scan_rows": 200,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_bd_refer_trade_daily_stat_di",
+        "column": "commission_u",
+        "time_column": "bizdate",
+        "table_description": "BD拉新、交易、返佣、出金日报"
+      },
+      "freshness": {
+        "data_start": "2026-04-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "bd_refer_trade_daily_stat.deposit",
+      "description": "入金金额",
+      "unit": "USDT",
+      "dimensions": [
+        "bd_name"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 5,
+      "max_scan_rows": 200,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_bd_refer_trade_daily_stat_di",
+        "column": "deposit",
+        "time_column": "bizdate",
+        "table_description": "BD拉新、交易、返佣、出金日报"
+      },
+      "freshness": {
+        "data_start": "2026-04-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "bd_refer_trade_daily_stat.eFTTC",
+      "description": "有效首次合约交易人数",
+      "unit": "人/笔",
+      "dimensions": [
+        "bd_name"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 5,
+      "max_scan_rows": 200,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_bd_refer_trade_daily_stat_di",
+        "column": "eFTTC",
+        "time_column": "bizdate",
+        "table_description": "BD拉新、交易、返佣、出金日报"
+      },
+      "freshness": {
+        "data_start": "2026-04-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "bd_refer_trade_daily_stat.net_deposit",
+      "description": "净入金",
+      "unit": "USDT",
+      "dimensions": [
+        "bd_name"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 5,
+      "max_scan_rows": 200,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_bd_refer_trade_daily_stat_di",
+        "column": "net_deposit",
+        "time_column": "bizdate",
+        "table_description": "BD拉新、交易、返佣、出金日报"
+      },
+      "freshness": {
+        "data_start": "2026-04-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "bd_refer_trade_daily_stat.net_fee_u",
+      "description": "留存手续费",
+      "unit": "USDT",
+      "dimensions": [
+        "bd_name"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 5,
+      "max_scan_rows": 200,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_bd_refer_trade_daily_stat_di",
+        "column": "net_fee_u",
+        "time_column": "bizdate",
+        "table_description": "BD拉新、交易、返佣、出金日报"
+      },
+      "freshness": {
+        "data_start": "2026-04-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "bd_refer_trade_daily_stat.register_uv",
+      "description": "注册人数",
+      "unit": "人/笔",
+      "dimensions": [
+        "bd_name"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 5,
+      "max_scan_rows": 200,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_bd_refer_trade_daily_stat_di",
+        "column": "register_uv",
+        "time_column": "bizdate",
+        "table_description": "BD拉新、交易、返佣、出金日报"
+      },
+      "freshness": {
+        "data_start": "2026-04-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "bd_refer_trade_daily_stat.risk_commission_u",
+      "description": "合约交易被风控的返佣金额",
+      "unit": "USDT",
+      "dimensions": [
+        "bd_name"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 5,
+      "max_scan_rows": 200,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_bd_refer_trade_daily_stat_di",
+        "column": "risk_commission_u",
+        "time_column": "bizdate",
+        "table_description": "BD拉新、交易、返佣、出金日报"
+      },
+      "freshness": {
+        "data_start": "2026-04-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "bd_refer_trade_daily_stat.trade_amount_u",
+      "description": "合约交易金额",
+      "unit": "USDT",
+      "dimensions": [
+        "bd_name"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 5,
+      "max_scan_rows": 200,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_bd_refer_trade_daily_stat_di",
+        "column": "trade_amount_u",
+        "time_column": "bizdate",
+        "table_description": "BD拉新、交易、返佣、出金日报"
+      },
+      "freshness": {
+        "data_start": "2026-04-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "bd_refer_trade_daily_stat.trade_fee_u",
+      "description": "合约交易手续费",
+      "unit": "USDT",
+      "dimensions": [
+        "bd_name"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 5,
+      "max_scan_rows": 200,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_bd_refer_trade_daily_stat_di",
+        "column": "trade_fee_u",
+        "time_column": "bizdate",
+        "table_description": "BD拉新、交易、返佣、出金日报"
+      },
+      "freshness": {
+        "data_start": "2026-04-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "bd_refer_trade_daily_stat.withdrawal",
+      "description": "出金金额",
+      "unit": "USDT",
+      "dimensions": [
+        "bd_name"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 5,
+      "max_scan_rows": 200,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_bd_refer_trade_daily_stat_di",
+        "column": "withdrawal",
+        "time_column": "bizdate",
+        "table_description": "BD拉新、交易、返佣、出金日报"
+      },
+      "freshness": {
+        "data_start": "2026-04-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "contract_order_deal_stat.finish_order_cnt",
+      "description": "已成交订单数",
+      "unit": "人/笔",
+      "dimensions": [
+        "contract_id",
+        "contract_name"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 137,
+      "max_scan_rows": 4200,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_contract_order_deal_stat_ha",
+        "column": "finish_order_cnt",
+        "time_column": "part_hour",
+        "table_description": "合约订单统计"
+      },
+      "freshness": {
+        "data_start": "2026-06-04 08:00:00",
+        "data_end": "2026-06-04 08:00:00",
+        "etl_time": "2026-06-04 09:04:48"
+      }
+    },
+    {
+      "name": "contract_order_deal_stat.history_deal_order_cnt",
+      "description": "近72小时历史成交数",
+      "unit": "人/笔",
+      "dimensions": [
+        "contract_id",
+        "contract_name"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 137,
+      "max_scan_rows": 4200,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_contract_order_deal_stat_ha",
+        "column": "history_deal_order_cnt",
+        "time_column": "part_hour",
+        "table_description": "合约订单统计"
+      },
+      "freshness": {
+        "data_start": "2026-06-04 08:00:00",
+        "data_end": "2026-06-04 08:00:00",
+        "etl_time": "2026-06-04 09:04:48"
+      }
+    },
+    {
+      "name": "contract_order_deal_stat.order_cnt",
+      "description": "历史订单数",
+      "unit": "人/笔",
+      "dimensions": [
+        "contract_id",
+        "contract_name"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 137,
+      "max_scan_rows": 4200,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_contract_order_deal_stat_ha",
+        "column": "order_cnt",
+        "time_column": "part_hour",
+        "table_description": "合约订单统计"
+      },
+      "freshness": {
+        "data_start": "2026-06-04 08:00:00",
+        "data_end": "2026-06-04 08:00:00",
+        "etl_time": "2026-06-04 09:04:48"
+      }
+    },
+    {
+      "name": "contract_order_deal_stat.progress_order_cnt",
+      "description": "未成交订单数",
+      "unit": "人/笔",
+      "dimensions": [
+        "contract_id",
+        "contract_name"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 137,
+      "max_scan_rows": 4200,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_contract_order_deal_stat_ha",
+        "column": "progress_order_cnt",
+        "time_column": "part_hour",
+        "table_description": "合约订单统计"
+      },
+      "freshness": {
+        "data_start": "2026-06-04 08:00:00",
+        "data_end": "2026-06-04 08:00:00",
+        "etl_time": "2026-06-04 09:04:48"
+      }
+    },
+    {
+      "name": "contract_order_deal_stat.progress_order_size",
+      "description": "未成交订单量",
+      "unit": "",
+      "dimensions": [
+        "contract_id",
+        "contract_name"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 137,
+      "max_scan_rows": 4200,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_contract_order_deal_stat_ha",
+        "column": "progress_order_size",
+        "time_column": "part_hour",
+        "table_description": "合约订单统计"
+      },
+      "freshness": {
+        "data_start": "2026-06-04 08:00:00",
+        "data_end": "2026-06-04 08:00:00",
+        "etl_time": "2026-06-04 09:04:48"
+      }
+    },
+    {
+      "name": "contract_trade_daily_stat.dauc",
+      "description": "合约交易人数(当日交易该合约的去重用户数)",
+      "unit": "人/笔",
+      "dimensions": [
+        "contract_name"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 7,
+      "max_scan_rows": 300,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_contract_trade_daily_stat_di",
+        "column": "dauc",
+        "time_column": "bizdate",
+        "table_description": "合约交易日报(日 + 合约维度)"
+      },
+      "freshness": {
+        "data_start": "2025-07-04",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "contract_trade_daily_stat.fttc",
+      "description": "首次合约交易人数(当日首次交易该合约的用户数)",
+      "unit": "人/笔",
+      "dimensions": [
+        "contract_name"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 7,
+      "max_scan_rows": 300,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_contract_trade_daily_stat_di",
+        "column": "fttc",
+        "time_column": "bizdate",
+        "table_description": "合约交易日报(日 + 合约维度)"
+      },
+      "freshness": {
+        "data_start": "2025-07-04",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "contract_trade_daily_stat.trade_amount_u",
+      "description": "合约交易金额 U本位",
+      "unit": "USDT",
+      "dimensions": [
+        "contract_name"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 7,
+      "max_scan_rows": 300,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_contract_trade_daily_stat_di",
+        "column": "trade_amount_u",
+        "time_column": "bizdate",
+        "table_description": "合约交易日报(日 + 合约维度)"
+      },
+      "freshness": {
+        "data_start": "2025-07-04",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "contract_trade_daily_stat.trade_fee_u",
+      "description": "合约交易手续费 U本位(含强平手续费)",
+      "unit": "USDT",
+      "dimensions": [
+        "contract_name"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 7,
+      "max_scan_rows": 300,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_contract_trade_daily_stat_di",
+        "column": "trade_fee_u",
+        "time_column": "bizdate",
+        "table_description": "合约交易日报(日 + 合约维度)"
+      },
+      "freshness": {
+        "data_start": "2025-07-04",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "liquidity_contract_daily_kline_price.open_price_00",
+      "description": "当日开盘价(UTC8当日首根K线开盘价)",
+      "unit": "",
+      "dimensions": [
+        "contract_id",
+        "contract_name"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 126,
+      "max_scan_rows": 3800,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_liquidity_contract_daily_kline_price_di",
+        "column": "open_price_00",
+        "time_column": "bizdate",
+        "table_description": "合约流动性开盘价日报(日 + 合约)"
+      },
+      "freshness": {
+        "data_start": "2026-01-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "liquidity_contract_daily_kline_price.open_price_dod_rate",
+      "description": "开盘价日环比",
+      "unit": "",
+      "dimensions": [
+        "contract_id",
+        "contract_name"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 126,
+      "max_scan_rows": 3800,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_liquidity_contract_daily_kline_price_di",
+        "column": "open_price_dod_rate",
+        "time_column": "bizdate",
+        "table_description": "合约流动性开盘价日报(日 + 合约)"
+      },
+      "freshness": {
+        "data_start": "2026-01-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "liquidity_contract_daily_kline_price.open_price_gap",
+      "description": "日内开盘价极差(最高开盘价-最低开盘价)",
+      "unit": "",
+      "dimensions": [
+        "contract_id",
+        "contract_name"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 126,
+      "max_scan_rows": 3800,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_liquidity_contract_daily_kline_price_di",
+        "column": "open_price_gap",
+        "time_column": "bizdate",
+        "table_description": "合约流动性开盘价日报(日 + 合约)"
+      },
+      "freshness": {
+        "data_start": "2026-01-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "liquidity_contract_daily_kline_price.open_price_std",
+      "description": "日内开盘价标准差(总体, 1分钟K线)",
+      "unit": "",
+      "dimensions": [
+        "contract_id",
+        "contract_name"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 126,
+      "max_scan_rows": 3800,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_liquidity_contract_daily_kline_price_di",
+        "column": "open_price_std",
+        "time_column": "bizdate",
+        "table_description": "合约流动性开盘价日报(日 + 合约)"
+      },
+      "freshness": {
+        "data_start": "2026-01-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "liquidity_contract_daily_kline_price.prev_open_price_00",
+      "description": "前一日开盘价",
+      "unit": "",
+      "dimensions": [
+        "contract_id",
+        "contract_name"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 126,
+      "max_scan_rows": 3800,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_liquidity_contract_daily_kline_price_di",
+        "column": "prev_open_price_00",
+        "time_column": "bizdate",
+        "table_description": "合约流动性开盘价日报(日 + 合约)"
+      },
+      "freshness": {
+        "data_start": "2026-01-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "liquidity_spot_daily_kline_price.open_price_00",
+      "description": "当日开盘价(UTC8当日首根K线开盘价)",
+      "unit": "",
+      "dimensions": [
+        "symbol_id",
+        "symbol_name"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 51,
+      "max_scan_rows": 1600,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_liquidity_spot_daily_kline_price_di",
+        "column": "open_price_00",
+        "time_column": "bizdate",
+        "table_description": "现货流动性开盘价日报(日 + 现货)"
+      },
+      "freshness": {
+        "data_start": "2026-01-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "liquidity_spot_daily_kline_price.open_price_dod_rate",
+      "description": "开盘价日环比",
+      "unit": "",
+      "dimensions": [
+        "symbol_id",
+        "symbol_name"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 51,
+      "max_scan_rows": 1600,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_liquidity_spot_daily_kline_price_di",
+        "column": "open_price_dod_rate",
+        "time_column": "bizdate",
+        "table_description": "现货流动性开盘价日报(日 + 现货)"
+      },
+      "freshness": {
+        "data_start": "2026-01-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "liquidity_spot_daily_kline_price.open_price_gap",
+      "description": "日内开盘价极差(最高开盘价-最低开盘价)",
+      "unit": "",
+      "dimensions": [
+        "symbol_id",
+        "symbol_name"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 51,
+      "max_scan_rows": 1600,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_liquidity_spot_daily_kline_price_di",
+        "column": "open_price_gap",
+        "time_column": "bizdate",
+        "table_description": "现货流动性开盘价日报(日 + 现货)"
+      },
+      "freshness": {
+        "data_start": "2026-01-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "liquidity_spot_daily_kline_price.open_price_std",
+      "description": "日内开盘价标准差(总体, 1分钟K线)",
+      "unit": "",
+      "dimensions": [
+        "symbol_id",
+        "symbol_name"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 51,
+      "max_scan_rows": 1600,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_liquidity_spot_daily_kline_price_di",
+        "column": "open_price_std",
+        "time_column": "bizdate",
+        "table_description": "现货流动性开盘价日报(日 + 现货)"
+      },
+      "freshness": {
+        "data_start": "2026-01-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "liquidity_spot_daily_kline_price.prev_open_price_00",
+      "description": "前一日开盘价",
+      "unit": "",
+      "dimensions": [
+        "symbol_id",
+        "symbol_name"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 51,
+      "max_scan_rows": 1600,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_liquidity_spot_daily_kline_price_di",
+        "column": "prev_open_price_00",
+        "time_column": "bizdate",
+        "table_description": "现货流动性开盘价日报(日 + 现货)"
+      },
+      "freshness": {
+        "data_start": "2026-01-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "overall_daily_stat.contract_trade_amt_u",
+      "description": "合约交易金额",
+      "unit": "USDT",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_overall_daily_stat_di",
+        "column": "contract_trade_amt_u",
+        "time_column": "bizdate",
+        "table_description": "全站整体日报"
+      },
+      "freshness": {
+        "data_start": "2026-01-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "overall_daily_stat.contract_trade_fee_u",
+      "description": "合约交易手续费",
+      "unit": "USDT",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_overall_daily_stat_di",
+        "column": "contract_trade_fee_u",
+        "time_column": "bizdate",
+        "table_description": "全站整体日报"
+      },
+      "freshness": {
+        "data_start": "2026-01-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "overall_daily_stat.dau",
+      "description": "活跃人数 现货+合约+外汇人数去重",
+      "unit": "人/笔",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_overall_daily_stat_di",
+        "column": "dau",
+        "time_column": "bizdate",
+        "table_description": "全站整体日报"
+      },
+      "freshness": {
+        "data_start": "2026-01-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "overall_daily_stat.dauc",
+      "description": "合约活跃人数",
+      "unit": "人/笔",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_overall_daily_stat_di",
+        "column": "dauc",
+        "time_column": "bizdate",
+        "table_description": "全站整体日报"
+      },
+      "freshness": {
+        "data_start": "2026-01-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "overall_daily_stat.dauf",
+      "description": "外汇活跃人数",
+      "unit": "人/笔",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_overall_daily_stat_di",
+        "column": "dauf",
+        "time_column": "bizdate",
+        "table_description": "全站整体日报"
+      },
+      "freshness": {
+        "data_start": "2026-01-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "overall_daily_stat.daus",
+      "description": "现货活跃人数",
+      "unit": "人/笔",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_overall_daily_stat_di",
+        "column": "daus",
+        "time_column": "bizdate",
+        "table_description": "全站整体日报"
+      },
+      "freshness": {
+        "data_start": "2026-01-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "overall_daily_stat.deposit",
+      "description": "入金金额",
+      "unit": "USDT",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_overall_daily_stat_di",
+        "column": "deposit",
+        "time_column": "bizdate",
+        "table_description": "全站整体日报"
+      },
+      "freshness": {
+        "data_start": "2026-01-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "overall_daily_stat.dnu",
+      "description": "注册人数",
+      "unit": "人/笔",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_overall_daily_stat_di",
+        "column": "dnu",
+        "time_column": "bizdate",
+        "table_description": "全站整体日报"
+      },
+      "freshness": {
+        "data_start": "2026-01-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "overall_daily_stat.eFTTC",
+      "description": "有效首次合约交易人数",
+      "unit": "人/笔",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_overall_daily_stat_di",
+        "column": "eFTTC",
+        "time_column": "bizdate",
+        "table_description": "全站整体日报"
+      },
+      "freshness": {
+        "data_start": "2026-01-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "overall_daily_stat.forex_trade_fee_u",
+      "description": "外汇交易手续费",
+      "unit": "USDT",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_overall_daily_stat_di",
+        "column": "forex_trade_fee_u",
+        "time_column": "bizdate",
+        "table_description": "全站整体日报"
+      },
+      "freshness": {
+        "data_start": "2026-01-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "overall_daily_stat.forex_trade_volume",
+      "description": "外汇交易手数",
+      "unit": "",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_overall_daily_stat_di",
+        "column": "forex_trade_volume",
+        "time_column": "bizdate",
+        "table_description": "全站整体日报"
+      },
+      "freshness": {
+        "data_start": "2026-01-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "overall_daily_stat.ftd",
+      "description": "首次入金人数",
+      "unit": "人/笔",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_overall_daily_stat_di",
+        "column": "ftd",
+        "time_column": "bizdate",
+        "table_description": "全站整体日报"
+      },
+      "freshness": {
+        "data_start": "2026-01-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "overall_daily_stat.ftt",
+      "description": "首次交易人数",
+      "unit": "人/笔",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_overall_daily_stat_di",
+        "column": "ftt",
+        "time_column": "bizdate",
+        "table_description": "全站整体日报"
+      },
+      "freshness": {
+        "data_start": "2026-01-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "overall_daily_stat.fttc",
+      "description": "首次合约交易人数",
+      "unit": "人/笔",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_overall_daily_stat_di",
+        "column": "fttc",
+        "time_column": "bizdate",
+        "table_description": "全站整体日报"
+      },
+      "freshness": {
+        "data_start": "2026-01-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "overall_daily_stat.fttf",
+      "description": "首次外汇交易人数",
+      "unit": "人/笔",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_overall_daily_stat_di",
+        "column": "fttf",
+        "time_column": "bizdate",
+        "table_description": "全站整体日报"
+      },
+      "freshness": {
+        "data_start": "2026-01-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "overall_daily_stat.ftts",
+      "description": "首次现货交易人数",
+      "unit": "人/笔",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_overall_daily_stat_di",
+        "column": "ftts",
+        "time_column": "bizdate",
+        "table_description": "全站整体日报"
+      },
+      "freshness": {
+        "data_start": "2026-01-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "overall_daily_stat.net_deposit",
+      "description": "净入金",
+      "unit": "USDT",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_overall_daily_stat_di",
+        "column": "net_deposit",
+        "time_column": "bizdate",
+        "table_description": "全站整体日报"
+      },
+      "freshness": {
+        "data_start": "2026-01-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "overall_daily_stat.spot_trade_amt_u",
+      "description": "现货交易金额",
+      "unit": "USDT",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_overall_daily_stat_di",
+        "column": "spot_trade_amt_u",
+        "time_column": "bizdate",
+        "table_description": "全站整体日报"
+      },
+      "freshness": {
+        "data_start": "2026-01-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "overall_daily_stat.spot_trade_fee_u",
+      "description": "现货交易手续费",
+      "unit": "USDT",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_overall_daily_stat_di",
+        "column": "spot_trade_fee_u",
+        "time_column": "bizdate",
+        "table_description": "全站整体日报"
+      },
+      "freshness": {
+        "data_start": "2026-01-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "overall_daily_stat.withdrawal",
+      "description": "出金金额",
+      "unit": "USDT",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_overall_daily_stat_di",
+        "column": "withdrawal",
+        "time_column": "bizdate",
+        "table_description": "全站整体日报"
+      },
+      "freshness": {
+        "data_start": "2026-01-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "polymarket_push_daily_report.trade_amount",
+      "description": "交易金额 - usdc",
+      "unit": "",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_polymarket_push_daily_report_di",
+        "column": "trade_amount",
+        "time_column": "bizdate",
+        "table_description": "预测市场推送日报"
+      },
+      "freshness": {
+        "data_start": "2026-06-12",
+        "data_end": "2026-07-14",
+        "etl_time": "2026-07-14 19:40:00"
+      }
+    },
+    {
+      "name": "polymarket_push_daily_report.trade_fee",
+      "description": "交易手续费 - usdc",
+      "unit": "",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_polymarket_push_daily_report_di",
+        "column": "trade_fee",
+        "time_column": "bizdate",
+        "table_description": "预测市场推送日报"
+      },
+      "freshness": {
+        "data_start": "2026-06-12",
+        "data_end": "2026-07-14",
+        "etl_time": "2026-07-14 19:40:00"
+      }
+    },
+    {
+      "name": "polymarket_push_daily_report.trade_users",
+      "description": "交易用户数",
+      "unit": "人/笔",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_polymarket_push_daily_report_di",
+        "column": "trade_users",
+        "time_column": "bizdate",
+        "table_description": "预测市场推送日报"
+      },
+      "freshness": {
+        "data_start": "2026-06-12",
+        "data_end": "2026-07-14",
+        "etl_time": "2026-07-14 19:40:00"
+      }
+    },
+    {
+      "name": "polymarket_push_monthly_report.trade_amount",
+      "description": "交易金额 - usdc",
+      "unit": "",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_polymarket_push_monthly_report_di",
+        "column": "trade_amount",
+        "time_column": "bizdate",
+        "table_description": "预测市场推送周报"
+      },
+      "freshness": {
+        "data_start": "2026-06-01",
+        "data_end": "2026-06-01",
+        "etl_time": "2026-06-30 19:20:00"
+      }
+    },
+    {
+      "name": "polymarket_push_monthly_report.trade_fee",
+      "description": "交易手续费 - usdc",
+      "unit": "",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_polymarket_push_monthly_report_di",
+        "column": "trade_fee",
+        "time_column": "bizdate",
+        "table_description": "预测市场推送周报"
+      },
+      "freshness": {
+        "data_start": "2026-06-01",
+        "data_end": "2026-06-01",
+        "etl_time": "2026-06-30 19:20:00"
+      }
+    },
+    {
+      "name": "polymarket_push_monthly_report.trade_users",
+      "description": "交易用户数",
+      "unit": "人/笔",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_polymarket_push_monthly_report_di",
+        "column": "trade_users",
+        "time_column": "bizdate",
+        "table_description": "预测市场推送周报"
+      },
+      "freshness": {
+        "data_start": "2026-06-01",
+        "data_end": "2026-06-01",
+        "etl_time": "2026-06-30 19:20:00"
+      }
+    },
+    {
+      "name": "polymarket_push_weekly_report.trade_amount",
+      "description": "交易金额 - usdc",
+      "unit": "",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_polymarket_push_weekly_report_di",
+        "column": "trade_amount",
+        "time_column": "bizdate",
+        "table_description": "预测市场推送周报"
+      },
+      "freshness": {
+        "data_start": "2026-06-15",
+        "data_end": "2026-07-06",
+        "etl_time": "2026-07-12 19:20:00"
+      }
+    },
+    {
+      "name": "polymarket_push_weekly_report.trade_fee",
+      "description": "交易手续费 - usdc",
+      "unit": "",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_polymarket_push_weekly_report_di",
+        "column": "trade_fee",
+        "time_column": "bizdate",
+        "table_description": "预测市场推送周报"
+      },
+      "freshness": {
+        "data_start": "2026-06-15",
+        "data_end": "2026-07-06",
+        "etl_time": "2026-07-12 19:20:00"
+      }
+    },
+    {
+      "name": "polymarket_push_weekly_report.trade_users",
+      "description": "交易用户数",
+      "unit": "人/笔",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_polymarket_push_weekly_report_di",
+        "column": "trade_users",
+        "time_column": "bizdate",
+        "table_description": "预测市场推送周报"
+      },
+      "freshness": {
+        "data_start": "2026-06-15",
+        "data_end": "2026-07-06",
+        "etl_time": "2026-07-12 19:20:00"
+      }
+    },
+    {
+      "name": "spot_order_deal_stat.finish_order_cnt",
+      "description": "已成交订单数",
+      "unit": "人/笔",
+      "dimensions": [
+        "symbol_id",
+        "symbol_name"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 34,
+      "max_scan_rows": 1100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_spot_order_deal_stat_ha",
+        "column": "finish_order_cnt",
+        "time_column": "part_hour",
+        "table_description": "现货订单统计"
+      },
+      "freshness": {
+        "data_start": "2026-06-04 08:00:00",
+        "data_end": "2026-06-04 08:00:00",
+        "etl_time": "2026-06-04 09:04:48"
+      }
+    },
+    {
+      "name": "spot_order_deal_stat.history_deal_order_cnt",
+      "description": "近72小时历史成交数",
+      "unit": "人/笔",
+      "dimensions": [
+        "symbol_id",
+        "symbol_name"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 34,
+      "max_scan_rows": 1100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_spot_order_deal_stat_ha",
+        "column": "history_deal_order_cnt",
+        "time_column": "part_hour",
+        "table_description": "现货订单统计"
+      },
+      "freshness": {
+        "data_start": "2026-06-04 08:00:00",
+        "data_end": "2026-06-04 08:00:00",
+        "etl_time": "2026-06-04 09:04:48"
+      }
+    },
+    {
+      "name": "spot_order_deal_stat.order_cnt",
+      "description": "历史订单数",
+      "unit": "人/笔",
+      "dimensions": [
+        "symbol_id",
+        "symbol_name"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 34,
+      "max_scan_rows": 1100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_spot_order_deal_stat_ha",
+        "column": "order_cnt",
+        "time_column": "part_hour",
+        "table_description": "现货订单统计"
+      },
+      "freshness": {
+        "data_start": "2026-06-04 08:00:00",
+        "data_end": "2026-06-04 08:00:00",
+        "etl_time": "2026-06-04 09:04:48"
+      }
+    },
+    {
+      "name": "spot_order_deal_stat.progress_order_cnt",
+      "description": "未成交订单数",
+      "unit": "人/笔",
+      "dimensions": [
+        "symbol_id",
+        "symbol_name"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 34,
+      "max_scan_rows": 1100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_spot_order_deal_stat_ha",
+        "column": "progress_order_cnt",
+        "time_column": "part_hour",
+        "table_description": "现货订单统计"
+      },
+      "freshness": {
+        "data_start": "2026-06-04 08:00:00",
+        "data_end": "2026-06-04 08:00:00",
+        "etl_time": "2026-06-04 09:04:48"
+      }
+    },
+    {
+      "name": "spot_order_deal_stat.progress_order_size",
+      "description": "未成交订单量",
+      "unit": "",
+      "dimensions": [
+        "symbol_id",
+        "symbol_name"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 34,
+      "max_scan_rows": 1100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_spot_order_deal_stat_ha",
+        "column": "progress_order_size",
+        "time_column": "part_hour",
+        "table_description": "现货订单统计"
+      },
+      "freshness": {
+        "data_start": "2026-06-04 08:00:00",
+        "data_end": "2026-06-04 08:00:00",
+        "etl_time": "2026-06-04 09:04:48"
+      }
+    },
+    {
+      "name": "trade_fee_daily_report.trade_fee",
+      "description": "交易手续费",
+      "unit": "",
+      "dimensions": [
+        "fee_coin",
+        "trade_type"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 9,
+      "max_scan_rows": 300,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_trade_fee_daily_report_di",
+        "column": "trade_fee",
+        "time_column": "bizdate",
+        "table_description": "手续费收取日报"
+      },
+      "freshness": {
+        "data_start": "2026-06-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "trade_fee_daily_report.trade_fee_u",
+      "description": "交易手续费U",
+      "unit": "USDT",
+      "dimensions": [
+        "fee_coin",
+        "trade_type"
+      ],
+      "requires_time_window": true,
+      "rows_per_day": 9,
+      "max_scan_rows": 300,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_trade_fee_daily_report_di",
+        "column": "trade_fee_u",
+        "time_column": "bizdate",
+        "table_description": "手续费收取日报"
+      },
+      "freshness": {
+        "data_start": "2026-06-01",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "world_cup_activity_user_trade.trade_amount_contract",
+      "description": "合约交易金额",
+      "unit": "",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_world_cup_activity_user_trade_di",
+        "column": "trade_amount_contract",
+        "time_column": "bizdate",
+        "table_description": "世界杯活动用户交易情况"
+      },
+      "freshness": {
+        "data_start": "2026-06-12",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "world_cup_activity_user_trade.trade_amount_polymarket",
+      "description": "预测市场交易金额",
+      "unit": "",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_world_cup_activity_user_trade_di",
+        "column": "trade_amount_polymarket",
+        "time_column": "bizdate",
+        "table_description": "世界杯活动用户交易情况"
+      },
+      "freshness": {
+        "data_start": "2026-06-12",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "world_cup_activity_user_trade.trade_amount_spot",
+      "description": "现货交易金额",
+      "unit": "",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_world_cup_activity_user_trade_di",
+        "column": "trade_amount_spot",
+        "time_column": "bizdate",
+        "table_description": "世界杯活动用户交易情况"
+      },
+      "freshness": {
+        "data_start": "2026-06-12",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "world_cup_activity_user_trade.trade_users_contract",
+      "description": "合约交易人数",
+      "unit": "人/笔",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_world_cup_activity_user_trade_di",
+        "column": "trade_users_contract",
+        "time_column": "bizdate",
+        "table_description": "世界杯活动用户交易情况"
+      },
+      "freshness": {
+        "data_start": "2026-06-12",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "world_cup_activity_user_trade.trade_users_mt5",
+      "description": "MT5交易人数",
+      "unit": "人/笔",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_world_cup_activity_user_trade_di",
+        "column": "trade_users_mt5",
+        "time_column": "bizdate",
+        "table_description": "世界杯活动用户交易情况"
+      },
+      "freshness": {
+        "data_start": "2026-06-12",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "world_cup_activity_user_trade.trade_users_polymarket",
+      "description": "预测市场交易人数",
+      "unit": "人/笔",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_world_cup_activity_user_trade_di",
+        "column": "trade_users_polymarket",
+        "time_column": "bizdate",
+        "table_description": "世界杯活动用户交易情况"
+      },
+      "freshness": {
+        "data_start": "2026-06-12",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "world_cup_activity_user_trade.trade_users_spot",
+      "description": "现货交易人数",
+      "unit": "人/笔",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_world_cup_activity_user_trade_di",
+        "column": "trade_users_spot",
+        "time_column": "bizdate",
+        "table_description": "世界杯活动用户交易情况"
+      },
+      "freshness": {
+        "data_start": "2026-06-12",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "world_cup_activity_user_trade.trade_users_tradfi",
+      "description": "TradFi交易人数",
+      "unit": "人/笔",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_world_cup_activity_user_trade_di",
+        "column": "trade_users_tradfi",
+        "time_column": "bizdate",
+        "table_description": "世界杯活动用户交易情况"
+      },
+      "freshness": {
+        "data_start": "2026-06-12",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "world_cup_activity_user_trade.trade_volume_mt5",
+      "description": "MT5交易手数",
+      "unit": "",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_world_cup_activity_user_trade_di",
+        "column": "trade_volume_mt5",
+        "time_column": "bizdate",
+        "table_description": "世界杯活动用户交易情况"
+      },
+      "freshness": {
+        "data_start": "2026-06-12",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    },
+    {
+      "name": "world_cup_activity_user_trade.trade_volume_tradfi",
+      "description": "TradFi交易手数",
+      "unit": "",
+      "dimensions": [],
+      "requires_time_window": true,
+      "rows_per_day": 1,
+      "max_scan_rows": 100,
+      "source": {
+        "catalog": "default_catalog",
+        "schema": "ads",
+        "table": "ads_world_cup_activity_user_trade_di",
+        "column": "trade_volume_tradfi",
+        "time_column": "bizdate",
+        "table_description": "世界杯活动用户交易情况"
+      },
+      "freshness": {
+        "data_start": "2026-06-12",
+        "data_end": "2026-07-16",
+        "etl_time": "2026-07-16 19:40:02"
+      }
+    }
+  ],
+  "dimensions_catalog": {
+    "ads_bd_refer_trade_daily_stat_di": [
+      {
+        "name": "bd_name",
+        "description": "BD名称",
+        "cardinality": 5
+      }
+    ],
+    "ads_contract_order_deal_stat_ha": [
+      {
+        "name": "contract_id",
+        "description": "合约ID",
+        "cardinality": 137
+      },
+      {
+        "name": "contract_name",
+        "description": "合约名称",
+        "cardinality": 137
+      }
+    ],
+    "ads_contract_trade_daily_stat_di": [
+      {
+        "name": "contract_name",
+        "description": "合约名称",
+        "cardinality": 151
+      }
+    ],
+    "ads_liquidity_contract_daily_kline_price_di": [
+      {
+        "name": "contract_id",
+        "description": "合约ID",
+        "cardinality": 193
+      },
+      {
+        "name": "contract_name",
+        "description": "合约名称",
+        "cardinality": 193
+      }
+    ],
+    "ads_liquidity_spot_daily_kline_price_di": [
+      {
+        "name": "symbol_id",
+        "description": "现货ID",
+        "cardinality": 54
+      },
+      {
+        "name": "symbol_name",
+        "description": "现货名称",
+        "cardinality": 54
+      }
+    ],
+    "ads_spot_order_deal_stat_ha": [
+      {
+        "name": "symbol_id",
+        "description": "现货币对ID",
+        "cardinality": 34
+      },
+      {
+        "name": "symbol_name",
+        "description": "现货币对",
+        "cardinality": 34
+      }
+    ],
+    "ads_trade_fee_daily_report_di": [
+      {
+        "name": "trade_type",
+        "description": "交易类型",
+        "cardinality": 5
+      },
+      {
+        "name": "fee_coin",
+        "description": "收取的手续费币种",
+        "cardinality": 34
+      }
+    ]
+  },
+  "build_notes": [
+    "ads 库共 44 张表/视图",
+    "排除 ads_benefit_distribution_detail_view：个体级（uid、account_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
+    "排除 ads_benefit_distribution_transaction_daily_stat_view：5/5 列没有注释，口径不明（bizdate、distribution_amt、distribution_uv、transaction_amt）",
+    "排除 ads_benefit_distribution_transaction_stat_view：5/5 列没有注释，口径不明（bizdate、distribution_amt、distribution_uv、transaction_amt）",
+    "排除 ads_bifu_user_mt5_commission_deal_di：找不到时间列，做不了时间窗强制",
+    "排除 ads_bifu_user_mt5_commission_detail_di：个体级（user_id、invite_uid）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
+    "排除 ads_channel_plan_A_activity_Samy_0513_data_view：个体级（user_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
+    "排除 ads_channel_plan_A_activity_karl_0513_data_view：个体级（user_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
+    "排除 ads_channel_plan_A_activity_karl_0514_data_view：个体级（user_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
+    "排除 ads_channel_plan_B_activity_stat_view：个体级（top_uid、user_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
+    "排除 ads_channel_plan_C_activity_stat_view：个体级（top_uid、user_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
+    "排除 ads_channel_plan_D_activity_stat_view：个体级（top_uid、user_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
+    "排除 ads_contract_info_tmp_di：找不到时间列，做不了时间窗强制",
+    "排除 ads_contract_user_net_profit_stat_hi：个体级（user_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
+    "排除 ads_forex_mt5_close_deal_detail_hi：个体级（login_id、user_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
+    "排除 ads_ib_user_commission_rate_da：个体级（top_uid、invite_uid、user_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
+    "排除 ads_liquidity_contract_daily_trade_di：个体级（user_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
+    "排除 ads_liquidity_contract_kline_price_view：6/6 列没有注释，口径不明（bizdate、contract_id、contract_name、open_price_dod）",
+    "排除 ads_liquidity_contract_trade_view：个体级（user_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
+    "排除 ads_liquidity_spot_daily_trade_di：个体级（user_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
+    "排除 ads_liquidity_spot_kline_price_view：6/6 列没有注释，口径不明（bizdate、symbol_id、symbol_name、open_price_dod）",
+    "排除 ads_liquidity_spot_trade_view：个体级（user_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
+    "排除 ads_polymarket_user_order_detail_view：个体级（user_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
+    "排除 ads_private_domain_network_user_tmp：个体级（user_id、login_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
+    "排除 ads_private_domain_trade_accumulative_stat_di：个体级（top_uid）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
+    "排除 ads_private_domain_trade_daily_stat_di：个体级（top_uid）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
+    "排除 ads_register_trade_deposit_daily_view：15/15 列没有注释，口径不明（bizdate、dnu、dau、daus）",
+    "排除 ads_risk_same_source_user_detail_di：个体级（user_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
+    "排除 ads_risk_same_users_ha：个体级（user_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
+    "排除 ads_risk_user_shared_identifier_detail_view：个体级（user_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
+    "排除 ads_sopt_trade_amt_fee_daily_token_stat_view：6/6 列没有注释，口径不明（symbol_name、bizdate、ftts、trade_fee_u）",
+    "排除 ads_sopt_trade_amt_fee_stat_view：找不到时间列，做不了时间窗强制",
+    "通过筛选 13 张，逐张探活",
+    "同名列 dauc 出现在 2 张表：ads_contract_trade_daily_stat_di、ads_overall_daily_stat_di —— 指标名已按表限定，不会混；但值得确认这几处是不是同一个口径",
+    "同名列 deposit 出现在 2 张表：ads_bd_refer_trade_daily_stat_di、ads_overall_daily_stat_di —— 指标名已按表限定，不会混；但值得确认这几处是不是同一个口径",
+    "同名列 eFTTC 出现在 2 张表：ads_bd_refer_trade_daily_stat_di、ads_overall_daily_stat_di —— 指标名已按表限定，不会混；但值得确认这几处是不是同一个口径",
+    "同名列 finish_order_cnt 出现在 2 张表：ads_contract_order_deal_stat_ha、ads_spot_order_deal_stat_ha —— 指标名已按表限定，不会混；但值得确认这几处是不是同一个口径",
+    "同名列 fttc 出现在 2 张表：ads_contract_trade_daily_stat_di、ads_overall_daily_stat_di —— 指标名已按表限定，不会混；但值得确认这几处是不是同一个口径",
+    "同名列 history_deal_order_cnt 出现在 2 张表：ads_contract_order_deal_stat_ha、ads_spot_order_deal_stat_ha —— 指标名已按表限定，不会混；但值得确认这几处是不是同一个口径",
+    "同名列 net_deposit 出现在 2 张表：ads_bd_refer_trade_daily_stat_di、ads_overall_daily_stat_di —— 指标名已按表限定，不会混；但值得确认这几处是不是同一个口径",
+    "同名列 open_price_00 出现在 2 张表：ads_liquidity_contract_daily_kline_price_di、ads_liquidity_spot_daily_kline_price_di —— 指标名已按表限定，不会混；但值得确认这几处是不是同一个口径",
+    "同名列 open_price_dod_rate 出现在 2 张表：ads_liquidity_contract_daily_kline_price_di、ads_liquidity_spot_daily_kline_price_di —— 指标名已按表限定，不会混；但值得确认这几处是不是同一个口径",
+    "同名列 open_price_gap 出现在 2 张表：ads_liquidity_contract_daily_kline_price_di、ads_liquidity_spot_daily_kline_price_di —— 指标名已按表限定，不会混；但值得确认这几处是不是同一个口径",
+    "同名列 open_price_std 出现在 2 张表：ads_liquidity_contract_daily_kline_price_di、ads_liquidity_spot_daily_kline_price_di —— 指标名已按表限定，不会混；但值得确认这几处是不是同一个口径",
+    "同名列 order_cnt 出现在 2 张表：ads_contract_order_deal_stat_ha、ads_spot_order_deal_stat_ha —— 指标名已按表限定，不会混；但值得确认这几处是不是同一个口径",
+    "同名列 prev_open_price_00 出现在 2 张表：ads_liquidity_contract_daily_kline_price_di、ads_liquidity_spot_daily_kline_price_di —— 指标名已按表限定，不会混；但值得确认这几处是不是同一个口径",
+    "同名列 progress_order_cnt 出现在 2 张表：ads_contract_order_deal_stat_ha、ads_spot_order_deal_stat_ha —— 指标名已按表限定，不会混；但值得确认这几处是不是同一个口径",
+    "同名列 progress_order_size 出现在 2 张表：ads_contract_order_deal_stat_ha、ads_spot_order_deal_stat_ha —— 指标名已按表限定，不会混；但值得确认这几处是不是同一个口径",
+    "同名列 trade_amount 出现在 3 张表：ads_polymarket_push_daily_report_di、ads_polymarket_push_monthly_report_di、ads_polymarket_push_weekly_report_di —— 指标名已按表限定，不会混；但值得确认这几处是不是同一个口径",
+    "同名列 trade_amount_u 出现在 2 张表：ads_bd_refer_trade_daily_stat_di、ads_contract_trade_daily_stat_di —— 指标名已按表限定，不会混；但值得确认这几处是不是同一个口径",
+    "同名列 trade_fee 出现在 4 张表：ads_polymarket_push_daily_report_di、ads_polymarket_push_monthly_report_di、ads_polymarket_push_weekly_report_di、ads_trade_fee_daily_report_di —— 指标名已按表限定，不会混；但值得确认这几处是不是同一个口径",
+    "同名列 trade_fee_u 出现在 3 张表：ads_bd_refer_trade_daily_stat_di、ads_contract_trade_daily_stat_di、ads_trade_fee_daily_report_di —— 指标名已按表限定，不会混；但值得确认这几处是不是同一个口径",
+    "同名列 trade_users 出现在 3 张表：ads_polymarket_push_daily_report_di、ads_polymarket_push_monthly_report_di、ads_polymarket_push_weekly_report_di —— 指标名已按表限定，不会混；但值得确认这几处是不是同一个口径",
+    "同名列 withdrawal 出现在 2 张表：ads_bd_refer_trade_daily_stat_di、ads_overall_daily_stat_di —— 指标名已按表限定，不会混；但值得确认这几处是不是同一个口径"
+  ]
+}

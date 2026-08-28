@@ -137,6 +137,11 @@ def _load_registry() -> MetricRegistry:
                     requires_time_window=bool(item.get("requires_time_window", True)),
                     max_scan_rows=item.get("max_scan_rows"),
                     rows_per_day=item.get("rows_per_day"),
+                    # 数据实际有到哪天。由 build_registry_from_ads.py 从底表量出来。
+                    # 缺了这两项，新鲜度检查会静默跳过 —— 那样助手会拿六周前的数
+                    # 回答"最近 7 天"。所以 verify.py 会单独报出来有多少指标缺它。
+                    data_start=(item.get("freshness") or {}).get("data_start"),
+                    data_end=(item.get("freshness") or {}).get("data_end"),
                 )
             )
         except (KeyError, TypeError) as exc:
@@ -375,6 +380,10 @@ def _audit(
         # 出了口径争议时责任完全不同。
         "timezone": (verdict.detail or {}).get("timezone"),
         "timezone_source": (verdict.detail or {}).get("timezone_source"),
+        # 这次回答实际覆盖到哪天。数仓停更时，同一个问题在不同日期问会得到
+        # 不同的覆盖范围 —— 事后要能回答"当时那个数统计到哪天为止"。
+        "data_coverage": (verdict.detail or {}).get("data_coverage"),
+        "data_covered": (verdict.detail or {}).get("covered"),
         "detail": dict(verdict.detail) if verdict.detail else None,
         # 以谁的名义查。**没有主体时也要写成 null 而不是不写这个键** ——
         # 下面那行 `if v` 会把假值整个丢掉，于是"这次调用没有身份"和"这条记录

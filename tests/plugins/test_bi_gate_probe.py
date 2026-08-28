@@ -142,3 +142,43 @@ class TestCanary:
         """探针调用在规则层面确实该被拒 —— 否则探针从设计上就不成立。"""
         verdict = rules_mod.evaluate(dict(probe_mod.CANARY_ARGS), rules_mod.MetricRegistry([]))
         assert verdict.blocked
+
+
+def test_probe_reaches_past_the_identity_layer(monkeypatch):
+    """探针必须走到身份之后的规则，不能只探到身份那一层。
+
+    2026-08-28 加身份透传之后真实发生的：探针从定时器跑、没有会话，于是撞的是
+    ``rejected_origin_not_allowed`` —— **它依然报"存活"，但指标注册、时间窗、
+    扫描量那几条规则一条都没跑到**。
+
+    「测试因为错误的原因通过」的又一例，而且这次是新加的前置检查造成的：
+    **加一层新的前置门槛，会让所有原本测后面几层的东西静默地改成测新那层。**
+    这条钉住探针确实绑了身份。
+    """
+    mod = _load("probe")
+    seen = {}
+
+    def _dispatch(name, args):
+        from gateway.session_context import get_session_env
+        seen["user_id"] = get_session_env("HERMES_SESSION_USER_ID")
+        return '{"error": "BI 门禁（bi-gate 插件，在调用发出前拦截）：指标未登记"}'
+
+    result = mod.probe(dispatch=_dispatch)
+    assert result.status == mod.ALIVE
+    assert seen.get("user_id") == mod.PROBE_PLATFORM_ID, (
+        f"探针发调用时没有绑上身份（读到 {seen.get('user_id')!r}）—— "
+        f"它会拦在身份那一层，后面的规则一条都验不到"
+    )
+    assert "已绑会话身份" in result.detail
+
+
+def test_probe_says_so_when_it_could_not_bind(monkeypatch):
+    """绑不上身份时，结论里要说清这轮只探到身份那一层。
+
+    「存活」这两个字不能比实际验到的东西更有力。
+    """
+    mod = _load("probe")
+    monkeypatch.setattr(mod, "_bind_probe_session", lambda: None)
+    result = mod.probe(dispatch=lambda n, a: '{"error": "BI 门禁（bi-gate 插件，在调用发出前拦截）：拦了"}')
+    assert result.status == mod.ALIVE
+    assert "没能绑上会话身份" in result.detail

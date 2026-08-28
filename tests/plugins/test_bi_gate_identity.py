@@ -347,3 +347,33 @@ def test_oneshot_cli_lands_in_unknown_not_cli(ident):
         {"cron": "", "user_id": "", "source": ""}) == "unknown"
     # cli 这一档只在真有东西绑了 source 时才出现（交互式 CLI / TUI / 桌面端）
     assert ident.classify_origin({"cron": "", "user_id": "", "source": "cli"}) == "cli"
+
+
+@pytest.mark.no_bi_identity
+def test_identity_rejection_does_not_invite_the_model_to_supply_one(ident, monkeypatch, tmp_path):
+    """拒因不能把模型引向「补个参数」或「问用户要身份」。
+
+    2026-08-28 真跑模型踩到的：第一版措辞是「这次调用没有携带发起人身份」，
+    模型把「携带」读成「该传个参数」，回头问用户「你的用户名是什么？或者
+    你知道该用哪个参数名标识发起人吗？」
+
+    **模型自己声称身份是这一层绝对不能发生的事** —— 拒因如果留下这个想象空间，
+    等于亲手教它绕过。所以拒因不只要说"为什么不行"，还要说"你做什么都不行"。
+    """
+    from gateway.session_context import set_session_vars, clear_session_vars
+    monkeypatch.setenv("BI_GATE_ALLOWED_ORIGINS", "human,unknown")
+    monkeypatch.setenv("BI_GATE_PRINCIPAL_MAP", _map(tmp_path, {"ou_x": {"subject": "s"}}))
+    ident.reload_principal_map()
+
+    # user_id 显式绑成空 = 有会话但没身份
+    tokens = set_session_vars(platform="feishu", user_id="", session_id="s")
+    try:
+        v = ident.resolve_principal()
+    finally:
+        clear_session_vars(tokens)
+
+    assert not v.ok
+    r = v.reason
+    assert "不是调用参数" in r, f"没说清身份不来自参数：{r}"
+    assert "索要" in r, f"没有明说不要向用户要身份：{r}"
+    assert "聊天" in r, f"没给出真正的出路：{r}"
