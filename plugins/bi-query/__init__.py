@@ -31,12 +31,19 @@ import datetime as _dt
 import json
 import logging
 import os
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
 TOOL_NAME = "query_metric"
+
+#: 门禁放行时塞进参数的配对键（bi-gate 的 CALL_ID_ARG）。
+#: 这里写死字符串而不是从 bi-gate import —— 两个插件要能各自独立部署，
+#: 一方没装的时候另一方不该崩。代价是这个常量在两处，改名要同时改；
+#: 有一条测试守住它们一致。
+GATE_CALL_ID_ARG = "_bi_gate_call_id"
 TOOLSET = "bi"
 
 #: 审计里标记执行方，和门禁的 GATE_SOURCE 对应，便于对账。
@@ -253,6 +260,15 @@ def handle_query_metric(args: Dict[str, Any], **_kwargs: Any) -> str:
 
     audit: Dict[str, Any] = {
         "event": "executed",
+        # 时间戳与配对键。两个原先都没有：
+        #   没时间戳 → 审计按时间窗查不了，也没法回答"这次执行发生在什么时候"
+        #   没配对键 → 「判定」和「执行」两行连不起来，对账只能靠计数，
+        #              而计数在时间窗边界上必然对不齐
+        # 配对键由门禁在放行时塞进 args（宿主的 modify 通道），这里原样记下。
+        # 取不到说明这次调用**没经过门禁** —— 那本身就是最该被发现的情况，
+        # 所以记成 None 而不是自己生成一个，别把异常抹平成正常。
+        "ts": int(time.time()),
+        "call_id": args.get(GATE_CALL_ID_ARG),
         "tool": TOOL_NAME,
         "metric": metric,
         "dimensions": sorted(dimensions) if dimensions else [],

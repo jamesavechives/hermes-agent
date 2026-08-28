@@ -62,6 +62,17 @@ def gate(tmp_path, monkeypatch):
     return mod
 
 
+def _allowed(result) -> bool:
+    """判定为放行。
+
+    放行不再是「返回 None」：门禁放行时会返回 ``{"action": "modify", ...}``，
+    把配对键塞进工具参数，好让 bi-query 的执行记录能和这条判定对上（对账用）。
+    这里判语义而不是判字面量 —— 否则每加一个放行时的副作用都要改一遍测试。
+    """
+    return result is None or (
+        isinstance(result, dict) and result.get("action") == "modify")
+
+
 def _call(gate, start, end, session="S1"):
     return gate._on_pre_tool_call(
         tool_name="query_metric",
@@ -84,7 +95,7 @@ def test_unset_means_no_session_budget(gate, monkeypatch):
     """
     monkeypatch.delenv("BI_GATE_SESSION_SCAN_MAX", raising=False)
     for _ in range(10):
-        assert _call(gate, "2026-08-01", "2026-08-21") is None
+        assert _allowed(_call(gate, "2026-08-01", "2026-08-21"))
 
 
 def test_garbage_value_is_reported_not_silently_ignored(gate, monkeypatch, caplog):
@@ -92,7 +103,7 @@ def test_garbage_value_is_reported_not_silently_ignored(gate, monkeypatch, caplo
 
     monkeypatch.setenv("BI_GATE_SESSION_SCAN_MAX", "很多")
     with caplog.at_level(logging.ERROR):
-        assert _call(gate, "2026-08-01", "2026-08-21") is None
+        assert _allowed(_call(gate, "2026-08-01", "2026-08-21"))
     assert any("BI_GATE_SESSION_SCAN_MAX" in r.getMessage() for r in caplog.records)
 
 
@@ -114,7 +125,7 @@ def test_decomposition_is_blocked(gate, monkeypatch):
         ("2026-06-01", "2026-06-30"),
     ]
     results = [_call(gate, a, b) for a, b in months]
-    passed = [r for r in results if r is None]
+    passed = [r for r in results if _allowed(r)]
     blocked = [r for r in results if _blocked(r)]
     assert len(passed) == 3, "前三个月每月 3000 万，累计 9000 万，都该放行"
     assert blocked, "第四个月起累计超过 1 亿，必须被拦"
@@ -124,19 +135,19 @@ def test_decomposition_is_blocked(gate, monkeypatch):
 def test_blocked_calls_do_not_consume_budget(gate, monkeypatch):
     """被拦的调用没有真的去扫，不该占额度。"""
     monkeypatch.setenv("BI_GATE_SESSION_SCAN_MAX", "60000000")
-    assert _call(gate, "2026-08-01", "2026-08-21") is None      # 2000 万
+    assert _allowed(_call(gate, "2026-08-01", "2026-08-21"))      # 2000 万
     # 这次单次就超限（80 天 = 8000 万 > 5000 万），被单次限额拦下
     assert _blocked(_call(gate, "2026-01-01", "2026-03-22"))
     # 额度应当还是只用了 2000 万，再来 3000 万仍可放行
-    assert _call(gate, "2026-02-01", "2026-03-03") is None
+    assert _allowed(_call(gate, "2026-02-01", "2026-03-03"))
 
 
 def test_sessions_are_isolated(gate, monkeypatch):
     """额度按会话算，别的会话用光了不影响这一个。"""
     monkeypatch.setenv("BI_GATE_SESSION_SCAN_MAX", "25000000")
-    assert _call(gate, "2026-08-01", "2026-08-21", session="A") is None
+    assert _allowed(_call(gate, "2026-08-01", "2026-08-21", session="A"))
     assert _blocked(_call(gate, "2026-08-01", "2026-08-21", session="A"))
-    assert _call(gate, "2026-08-01", "2026-08-21", session="B") is None
+    assert _allowed(_call(gate, "2026-08-01", "2026-08-21", session="B"))
 
 
 def test_deny_message_does_not_hand_out_a_bypass(gate, monkeypatch):
@@ -161,8 +172,8 @@ def test_counter_is_seeded_from_the_audit_after_restart(gate, monkeypatch, tmp_p
     审计文件就是账本，重新加载时从它播种，不另外维护一份状态。
     """
     monkeypatch.setenv("BI_GATE_SESSION_SCAN_MAX", "45000000")
-    assert _call(gate, "2026-08-01", "2026-08-21") is None   # 2000 万
-    assert _call(gate, "2026-08-01", "2026-08-21") is None   # 累计 4000 万
+    assert _allowed(_call(gate, "2026-08-01", "2026-08-21"))   # 2000 万
+    assert _allowed(_call(gate, "2026-08-01", "2026-08-21"))   # 累计 4000 万
 
     # 模拟重启：换一个模块实例，内存计数器是空的
     fresh = _load("bi_gate_session_after_restart")

@@ -28,6 +28,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
+import uuid
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional
 
@@ -53,6 +55,10 @@ logger = logging.getLogger(__name__)
 
 #: 门禁只管这个工具。run_sql 的降级路径有另一套围栏，不在本插件范围内。
 GATED_TOOL = "query_metric"
+
+#: 门禁放行时塞进工具参数的配对键。bi-query 读到就记进自己的执行记录，
+#: 这样「判定」和「执行」两行才连得起来 —— 对账不用靠计数。
+CALL_ID_ARG = "_bi_gate_call_id"
 
 #: 注册表来源。留成环境变量是因为首批指标还在对齐口径，落地前会反复改；
 #: 指标层稳定后应改为从指标服务拉取并带版本号。
@@ -326,6 +332,10 @@ def _audit(
     """
     record = {
         "event": "bi_gate_verdict",
+        # 时间戳。原先整个没有 —— 审计是合规唯一会查的东西，没有时间戳
+        # 基本等于不可用：既回答不了"这次拦截什么时候发生的"，也没法按时间窗对账。
+        # 2026-08-28 做审计上报时才发现（探针记录一直有 ts，审计没有）。
+        "ts": int(time.time()),
         # 对账靠这个字段区分是谁写的——门禁写判定、bi-query 写执行。
         # 漏了它，两边记录混在一起就分不开（2026-08-26 首次落盘时就漏了）。
         "source": GATE_SOURCE,
@@ -554,9 +564,21 @@ def _on_pre_tool_call(
         # 再回答「这个会话还有没有额度」，拒因不会互相盖住。
         session_limit = _session_scan_max()
         if not verdict.blocked and session_limit is not None:
-            verdict = check_session_scan_budget(
+            session_verdict = check_session_scan_budget(
                 _session_scanned_now(session_id), this_call, session_limit
             )
+            # 会话检查也放行时，**保留原判定的 detail**。
+            # 原先这里直接 `verdict = check_session_scan_budget(...)`，而那个函数
+            # 放行时返回的是不带 detail 的 ALLOW —— evaluate 好不容易带出来的
+            # 时区就这么丢了。审计里 timezone 永远是 null，而我们还写了文档说
+            # 「事后能查这个数按哪个时区算的」。2026-08-28 看真实审计数据才发现：
+            # time_window.timezone 是 UTC+8，顶层 timezone 却是 null。
+            verdict = session_verdict if session_verdict.blocked else verdict
+
+        # 配对键。判定和执行分别写自己的审计行，之间原先没有任何能连起来的东西，
+        # 对账只能靠计数 —— 而计数在时间窗边界上必然对不齐。
+        # 优先用宿主的 tool_call_id（这样还能和宿主转录对上），没有才自己生成。
+        call_id = str(context.get("tool_call_id") or "") or uuid.uuid4().hex[:16]
 
         _audit(
             verdict,
@@ -568,11 +590,16 @@ def _on_pre_tool_call(
             session_id=context.get("session_id"),
             task_id=context.get("task_id"),
             tool_call_id=context.get("tool_call_id"),
+            call_id=call_id,
         )
         if not verdict.blocked:
             # 放行之后才累加 —— 被拦的调用没有真的去扫，不该占额度。
             _session_add(session_id, this_call)
-            return None
+            # 把配对键塞进工具参数，让 bi-query 记下同一个 id。
+            # 宿主的 pre_tool_call 支持 {"action": "modify", "args": {...}}，
+            # 这条通道就是干这个用的；不走它的话，两边只能靠时间近似配对。
+            # 下划线开头表示这是元数据，不是查询语义的一部分。
+            return {"action": "modify", "args": {CALL_ID_ARG: call_id}}
         return {"action": "block", "message": verdict.reason or "BI 门禁拦截。"}
     except Exception:
         return _gate_error_block(args, context)
