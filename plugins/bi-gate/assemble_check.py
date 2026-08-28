@@ -642,12 +642,109 @@ def check_mock_fields(decl: Dict[str, Any]) -> List[Result]:
                    + ("…" if len(mocks) > 6 else ""))]
 
 
+#: 工具名 → 提供它的插件。和 build_profile.py 的 TOOL_PROVIDERS 是同一张表，
+#: **故意各写一份** —— 两个文件可以分别部署，靠测试守住它们相等（同 bi-query
+#: 那边的 GATE_CALL_ID_ARG）。
+TOOL_PROVIDERS: Dict[str, str] = {
+    "query_metric": "bi-query",
+}
+
+
+def _enabled_plugins(config_text: str) -> frozenset:
+    """从 config.yaml 里读 plugins.enabled，块状和行内两种写法都认。
+
+    不引 pyyaml：这份检查跑在部署机上，依赖越少越好。代价是要自己处理两种写法 ——
+    第一版只认块状 ``- name``，结果把 ``enabled: [bi-gate]`` 判成"一个都没启用"。
+    宁可解析粗糙，也不能把"我不认识这种写法"报成"它没启用"。
+    """
+    names = set()
+    in_enabled = False
+    for raw in config_text.splitlines():
+        line = raw.rstrip()
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if stripped.startswith("enabled:"):
+            rest = stripped[len("enabled:"):].strip()
+            if rest.startswith("[") and rest.endswith("]"):
+                # 行内列表：enabled: [bi-gate, bi-query]
+                names.update(x.strip().strip("\"'") for x in rest[1:-1].split(",") if x.strip())
+                in_enabled = False
+            else:
+                in_enabled = True
+            continue
+        if in_enabled:
+            if stripped.startswith("-"):
+                names.add(stripped.lstrip("-").strip().strip("\"'"))
+            else:
+                # 缩进结束，enabled 这一段完了
+                in_enabled = False
+    return frozenset(n for n in names if n)
+
+
+def check_declared_tools_are_reachable(decl: Dict[str, Any]) -> List[Result]:
+    """⑧ 声明了的工具，真的调得到吗。
+
+    2026-08-28 真跑一次模型才发现的坑：``build_profile.py`` 生成的
+    ``config.yaml`` 里 ``plugins.enabled`` 硬编码只有 ``bi-gate``。于是
+    ``authorization.yaml`` 声明 ``tools: [query_metric]``、门禁也照着放行，
+    **但 query_metric 那个插件根本没启用，工具压根没注册**。人格是块砖，
+    而 preflight 和这份检查当时都判它合法。模型自己的诊断原话：
+
+        「声明该人格只能使用 query_metric，但 query_metric 并未实际注册到
+         我的可用工具列表中……我目前没有任何可调用的工具」
+
+    方向是安全的（fail-closed，泄不了），但「检查全过、跑起来什么都干不了」
+    和「44 个测试全绿但文档写的命令执行不了」是同一类失效：**检查的是声明，
+    没检查声明指向的东西存不存在。**
+
+    只修生成器不够 —— 手工建的 profile（dev 上的 ``bi`` 就是）不经过生成器。
+    强制得做在这里。
+    """
+    out: List[Result] = []
+    tools = [x.strip() for x in decl["env"].get("BI_GATE_TOOLS", "").split(",") if x.strip()]
+    config_text = decl.get("config_text") or ""
+
+    if not tools:
+        out.append(Result("工具白名单为空", True, "该人格调不了任何工具（③ 已单独提示）"))
+        return out
+
+    if not config_text.strip():
+        out.append(Result("config.yaml 缺失", False,
+                          f"插件一个都不会启用，但声明里写着 {'、'.join(tools)}，全都调不到"))
+        return out
+
+    for tool in tools:
+        provider = TOOL_PROVIDERS.get(tool)
+        if provider is None:
+            # 不认识就不断言。可能是宿主内置工具（那不需要启用插件），
+            # 也可能是拼错了。宁可说不知道，不要假装查过。
+            out.append(Result(tool, None, "不知道由哪个插件提供，没查（若是插件工具请补进 TOOL_PROVIDERS）"))
+            continue
+        # 粗糙但直接：看 config.yaml 里有没有这个插件名。做 YAML 解析要引 pyyaml，
+        # 而这份检查跑在部署机上，依赖越少越好。
+        enabled = provider in _enabled_plugins(config_text)
+        out.append(Result(
+            tool, enabled,
+            f"由 {provider} 提供，config.yaml 已启用" if enabled else
+            f"由 {provider} 提供，**但 config.yaml 的 plugins.enabled 里没有它** —— "
+            f"门禁会放行这个工具，而工具根本没注册，人格什么都干不了",
+        ))
+
+    # 门禁自己也得在。它不在的话上面每一条检查都没有意义。
+    gate_on = "bi-gate" in _enabled_plugins(config_text)
+    out.append(Result("bi-gate 本身", gate_on, "已启用" if gate_on else
+                      "**config.yaml 里没有它 —— 门禁完全不存在，且不会报任何错**"))
+    return out
+
+
 SECTIONS = [
     ("① 五块字段齐全", check_fields),
     ("② 审批签字齐全", check_approvals),
     ("③ 声明之间自相容", check_self_consistency),
     ("④ action_policy 可解析", check_policy_parses),
     ("⑥ 生成物没被手改", check_not_hand_edited),
+    ("⑧ 声明了的工具真的调得到", check_declared_tools_are_reachable),
     ("⑦ mock 值（未经确认，不拦部署）", check_mock_fields),
 ]
 

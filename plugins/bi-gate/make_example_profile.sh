@@ -61,10 +61,14 @@ cat > "$DEST/approvals.json" <<'JSON'
 JSON
 
 cat > "$DEST/config.yaml" <<'YAML'
-# 插件是 opt-in 的。少这一段，门禁完全不存在，而且不会报任何错。
+# 插件是 opt-in 的。两个都要：
+#   bi-gate  少了它，门禁完全不存在，而且不会报任何错。
+#   bi-query 少了它，门禁在、query_metric 没注册 —— 人格什么都干不了。
+# 2026-08-28 在 dev 上真实踩过第二种：所有检查全绿，模型跑起来一个工具都调不到。
 plugins:
   enabled:
     - bi-gate
+    - bi-query
 YAML
 
 echo "样例 profile 已生成：$DEST"

@@ -60,7 +60,10 @@ def _profile(tmp_path: Path, env_lines: str, *, approvals: dict | None = None) -
     p = tmp_path / "prof"
     p.mkdir(exist_ok=True)
     (p / ".env").write_text(env_lines, encoding="utf-8")
-    (p / "config.yaml").write_text("plugins:\n  enabled: [bi-gate]\n", encoding="utf-8")
+    (p / "config.yaml").write_text(
+        # bi-query 必须在 —— 只有 bi-gate 的话门禁开着、query_metric 没注册，
+        # 那是块砖，不该被当成"合法样本"。2026-08-28 在 dev 上真实发生过。
+        "plugins:\n  enabled: [bi-gate, bi-query]\n", encoding="utf-8")
     if approvals is not None:
         (p / "approvals.json").write_text(json.dumps(approvals), encoding="utf-8")
     return p
@@ -294,3 +297,54 @@ def test_a_crashing_check_counts_as_failure_not_pass(ac, tmp_path, monkeypatch):
     code, results = ac.run(prof, skip_runtime=True)
     assert code == 1
     assert any(r.ok is False and "故意炸" in r.detail for r in results)
+
+
+# ---------------------------------------------------------------------------
+# ⑧ 声明了的工具真的调得到
+# ---------------------------------------------------------------------------
+
+def _profile_with(tmp_path, tools: str, config_body: str):
+    prof = tmp_path / "p"
+    prof.mkdir()
+    (prof / ".env").write_text(f"BI_GATE_TOOLS={tools}\n", encoding="utf-8")
+    (prof / "config.yaml").write_text(config_body, encoding="utf-8")
+    return prof
+
+
+def test_declared_tool_without_its_plugin_is_caught(ac, tmp_path):
+    """声明 query_metric 但 config 里没有 bi-query —— 必须判不过。
+
+    这条守的是 2026-08-28 在 dev 上真实发生过的那个 profile：门禁开着、
+    工具没注册，模型跑起来一个工具都调不到，而当时所有检查都是绿的。
+    """
+    prof = _profile_with(tmp_path, "query_metric", "plugins:\n  enabled:\n    - bi-gate\n")
+    results = ac.check_declared_tools_are_reachable(ac.load_declaration(prof))
+    bad = [r for r in results if r.ok is False]
+    assert bad, "没抓住 —— 这正是当时漏过去的那个 profile 的形状"
+    assert any("bi-query" in r.detail for r in bad)
+
+
+def test_both_plugins_present_passes(ac, tmp_path):
+    prof = _profile_with(tmp_path, "query_metric",
+                         "plugins:\n  enabled:\n    - bi-gate\n    - bi-query\n")
+    results = ac.check_declared_tools_are_reachable(ac.load_declaration(prof))
+    assert all(r.ok is not False for r in results), [str(r) for r in results]
+
+
+def test_missing_gate_itself_is_caught(ac, tmp_path):
+    """config 里没有 bi-gate —— 门禁完全不存在，且运行时不报任何错。"""
+    prof = _profile_with(tmp_path, "query_metric",
+                         "plugins:\n  enabled:\n    - bi-query\n")
+    results = ac.check_declared_tools_are_reachable(ac.load_declaration(prof))
+    assert any(r.ok is False and "bi-gate" in r.name for r in results)
+
+
+def test_unknown_tool_is_undecidable_not_a_pass(ac, tmp_path):
+    """不认识的工具名记成"查不了"（ok=None），不能记成通过。
+
+    「查不了」是第三种结果 —— 假装查过是这套东西一路在堵的失效方式。
+    """
+    prof = _profile_with(tmp_path, "某个宿主内置工具",
+                         "plugins:\n  enabled:\n    - bi-gate\n")
+    results = ac.check_declared_tools_are_reachable(ac.load_declaration(prof))
+    assert any(r.ok is None for r in results), [str(r) for r in results]

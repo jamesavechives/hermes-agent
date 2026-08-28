@@ -55,6 +55,10 @@ def _profile(tmp_path: Path, *, metrics, session_max=None, tools="query_metric",
     if session_max is not None:
         env.append(f"BI_GATE_SESSION_SCAN_MAX={session_max}")
     (d / ".env").write_text("\n".join(env) + "\n", encoding="utf-8")
+    # config.yaml 也得有：没有它 = 一个插件都不启用 = 这个 profile 跑不起来，
+    # 那样它就不该被当成"自相容的合法样本"（检查 ⑧，2026-08-28 加）。
+    (d / "config.yaml").write_text(
+        "plugins:\n  enabled: [bi-gate, bi-query]\n", encoding="utf-8")
     return d
 
 

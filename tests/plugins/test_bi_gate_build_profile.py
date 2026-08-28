@@ -415,3 +415,51 @@ def test_env_marker_matches_on_both_sides(tmp_path, bp):
     sys.modules["ac_for_marker"] = ac
     spec.loader.exec_module(ac)
     assert bp.ENV_MARKER == ac.ENV_MARKER
+
+
+# ---------------------------------------------------------------------------
+# 声明了的工具，生成的 config.yaml 里得真的能调到
+#
+# 2026-08-28 真跑模型发现的坑：render_config 原先硬编码只写 ``- bi-gate``，
+# 于是生成出来的人格门禁开着、query_metric 根本没注册 —— 什么都干不了，
+# 而 preflight 和 assemble_check 当时都判它合法。方向安全（fail-closed），
+# 但「检查全过、跑起来是块砖」和「44 个测试全绿但文档写的命令执行不了」
+# 是同一类：检查的是声明，没检查声明指向的东西存不存在。
+# ---------------------------------------------------------------------------
+
+def test_config_enables_the_plugin_that_provides_the_declared_tool(bp):
+    """声明 query_metric，生成的 config 里必须同时有 bi-gate 和 bi-query。"""
+    text, pending = bp.render_config({"self_evolution": False}, ["query_metric"])
+    enabled = [ln.strip().lstrip("-").strip()
+               for ln in text.splitlines() if ln.strip().startswith("-")]
+    assert "bi-gate" in enabled, "门禁没写进去 —— 门禁完全不存在且不报错"
+    assert "bi-query" in enabled, (
+        "声明了 query_metric 但没启用 bi-query —— 门禁在、工具不在，人格是块砖"
+    )
+    assert not any("query_metric" in p for p in pending)
+
+
+def test_unknown_tool_is_reported_not_silently_dropped(bp):
+    """不认识的工具名要进 pending，不能静默略过。
+
+    静默略过的后果：生成的人格声明了一个自己根本调不到的工具，运行时才发现。
+    """
+    _, pending = bp.render_config({"self_evolution": False},
+                                  ["query_metric", "打错的工具名"])
+    assert any("打错的工具名" in p for p in pending), (
+        f"不认识的工具名被静默略过了：{pending!r}"
+    )
+
+
+def test_tool_providers_table_matches_assemble_check(bp):
+    """两张 TOOL_PROVIDERS 表必须一致。
+
+    故意各写一份（两个文件可以分别部署），所以靠这条守住相等 ——
+    同 bi-query 那边 GATE_CALL_ID_ARG 的做法。两边不一致的后果是：
+    生成器把插件写进去了，检查器却说没启用（或反过来）。
+    """
+    ac = _load("bi_gate_ac_for_providers", PLUGIN_DIR / "assemble_check.py")
+    assert bp.TOOL_PROVIDERS == ac.TOOL_PROVIDERS, (
+        f"两张表不一致：build_profile={bp.TOOL_PROVIDERS} "
+        f"assemble_check={ac.TOOL_PROVIDERS}"
+    )

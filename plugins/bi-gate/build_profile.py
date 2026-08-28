@@ -77,6 +77,19 @@ DECLARATIONS = ("persona", "facts", "authorization", "skills", "fallback")
 #: manifest 文件名。放在运行时目录里，跟着 profile 走。
 MANIFEST = ".generated.json"
 
+#: 工具名 → 提供它的插件。生成 config.yaml 时据此把插件也写进 plugins.enabled。
+#:
+#: 2026-08-28 实测发现的坑：原先这里硬编码只写 ``- bi-gate``，于是生成出来的
+#: 人格门禁开着、``query_metric`` 根本没注册 —— **什么都干不了，而 preflight
+#: 和 assemble_check 都判它合法**。真跑一次模型才看出来，它自己诊断的原话是
+#: 「声明该人格只能使用 query_metric，但 query_metric 并未实际注册」。
+#:
+#: 方向是安全的（fail-closed，泄不了），但「检查全过、跑起来是块砖」和
+#: 「44 个测试全绿但文档写的命令执行不了」是同一类失效。
+TOOL_PROVIDERS: Dict[str, str] = {
+    "query_metric": "bi-query",
+}
+
 #: ``.env`` 里的分界线。以上由本工具生成、参与 hash；以下由部署方维护。
 #:
 #: 为什么需要它：模型凭据（DASHSCOPE_API_KEY 之类）**必须**由部署的人往 .env 里
@@ -320,22 +333,47 @@ def render_env(auth: Dict[str, Any], runtime: Path) -> Tuple[str, List[str]]:
     return "\n".join(lines), pending
 
 
-def render_config(skills: Dict[str, Any]) -> Tuple[str, List[str]]:
-    """④ skills → config.yaml（同时带上 plugins.enabled —— 少这一段门禁完全不存在）。"""
+def render_config(skills: Dict[str, Any], declared_tools: List[Any]) -> Tuple[str, List[str]]:
+    """④ skills + authorization.tools → config.yaml。
+
+    ``plugins.enabled`` 必须同时含门禁和**提供被声明工具的那些插件**，
+    缺任何一边都不会报错，只会安静地做不了事。见 :data:`TOOL_PROVIDERS`。
+    """
     pending: List[str] = []
     self_evo = _require(skills, "self_evolution", "skills.yaml")
     if self_evo is None:
         pending.append("skills.self_evolution 待定")
     elif self_evo:
         pending.append("skills.self_evolution 为 true —— 自演化开着，画像写入限制还没做（§八）")
+    # 门禁本身永远要在。其余按 authorization.yaml 声明的 tools 反查提供方 ——
+    # 声明了某个工具却不把提供它的插件启用，人格就是块砖（见 TOOL_PROVIDERS）。
+    enabled = ["bi-gate"]
+    unknown: List[str] = []
+    for tool in declared_tools:
+        provider = TOOL_PROVIDERS.get(str(tool))
+        if provider is None:
+            unknown.append(str(tool))
+        elif provider not in enabled:
+            enabled.append(provider)
+
+    if unknown:
+        # 不认识的工具名不静默略过。它要么是宿主内置（那就不需要启用插件），
+        # 要么是拼错了（那生成出来的人格会以为自己有这个工具、实际调不到）。
+        # 两种都得让人看见，所以进 pending 而不是进日志。
+        pending.append(
+            "authorization.yaml 声明了 " + "、".join(unknown) +
+            " —— build_profile 不知道哪个插件提供它。若是宿主内置工具可忽略；"
+            "若是插件工具，请补进 build_profile.py 的 TOOL_PROVIDERS，"
+            "否则生成的人格会声明一个自己根本调不到的工具"
+        )
+
     lines = [
-        "# 由 build_profile.py 从 skills.yaml 生成，不要手改。",
-        "# plugins.enabled 少了这一段，门禁完全不存在，而且不会报任何错。",
+        "# 由 build_profile.py 从 skills.yaml + authorization.yaml 生成，不要手改。",
+        "# plugins.enabled 少了 bi-gate，门禁完全不存在，而且不会报任何错。",
+        "# 少了提供工具的那个插件（如 bi-query），门禁在、工具不在 —— 人格什么都干不了。",
         "plugins:",
         "  enabled:",
-        "    - bi-gate",
-        "",
-    ]
+    ] + [f"    - {name}" for name in enabled] + [""]
     return "\n".join(lines), pending
 
 
@@ -391,7 +429,7 @@ def build(src: Path, runtime: Path) -> Tuple[Dict[str, str], List[str], List[str
     registry, p_reg = render_registry(decl["facts"])
     policy, p_pol = render_policy(decl["authorization"])
     env, p_env = render_env(decl["authorization"], runtime)
-    config, p_cfg = render_config(decl["skills"])
+    config, p_cfg = render_config(decl["skills"], decl["authorization"].get("tools") or [])
     p_fb = collect_fallback_pending(decl["fallback"])
 
     files = {
