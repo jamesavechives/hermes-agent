@@ -4,31 +4,96 @@
 # 这里登记的就是「受控事实层」：没登记的指标一律拒绝。
 # 这条是有意的 —— 助手答「这个指标没登记」，好过它自己拼一个口径然后被当成官方数字。
 
-# 统计时区。Tex 的《BI + AI 需求梳理》里明确让用户选 UTC8 还是 UTC0，
-# 我们原先漏了这一项。默认值待业务方定，见《待确认事项》第三节。
-default_timezone: null
+# ── 哪些值是我们先填的、还没人确认 ────────────────────────────
+# mock 不能只写在注释里：注释不会被装配期检查读到，几周之后没人分得清
+# 哪个值是拍过板的。列在这里，build_profile 和 assemble_check 都会报出来。
+_mock_fields:
+  - default_timezone
+  - metrics[*].rows_per_day      # 底表日增行数，等数仓给真值
+  - metrics[*].max_scan_rows     # 单次扫描上限，跟着 rows_per_day 一起定
+  - metrics 清单本身              # 照 BI 常问的先列 15 个，等 Tex 的指标文档
+  - forbidden_patterns           # 红线清单，等业务方 + 合规
+
+# 统计时区。Tex 的《BI + AI 需求梳理》里明确让用户选 UTC8 还是 UTC0。
+# 先按 UTC+8（运营日常口径通常按本地），待业务方确认。
+default_timezone: UTC+8
+
+# ── 红线：永远不该进这个助手的数据 ────────────────────────────
+# 和"没登记"不是一回事：没登记只是暂时查不了，红线是明令禁止。
+# 装配期检查会验没有指标命中这些模式 —— 防的是以后有人顺手把它们登记进来。
+forbidden_patterns:
+  - user_balance          # 单个用户的资金与持仓
+  - user_position
+  - kyc                   # 身份信息
+  - id_card
+  - passport
+  - employee              # 员工数据
+  - salary
+  - unreleased            # 未公开的经营数字
 
 metrics:
+  # ── 用户 ──────────────────────────────────────────────
   - name: daily_active_users
     label: 日活用户数
     dimensions: [market, channel]
     requires_time_window: true
     rows_per_day: 1200000
-    max_scan_rows: 50000000
-    owner: null        # 口径归谁 —— 待业务方给
-    source: null       # 哪张清洗表 / 哪个看板 —— 待业务方给
+    max_scan_rows: 150000000
+    owner: null
+    source: null
 
+  - name: new_registrations
+    label: 新注册用户数
+    dimensions: [market, channel]
+    requires_time_window: true
+    rows_per_day: 80000
+    max_scan_rows: 30000000
+    owner: null
+    source: null
+
+  - name: active_traders
+    label: 活跃交易用户数
+    dimensions: [market, product]
+    requires_time_window: true
+    rows_per_day: 400000
+    max_scan_rows: 100000000
+    owner: null
+    source: null
+
+  # ── 交易 ──────────────────────────────────────────────
   - name: spot_trade_volume
     label: 现货成交量
     dimensions: [symbol, market]
     requires_time_window: true
     rows_per_day: 8600000
-    # 原先这里写的是 2 亿。那和 authorization.yaml 的 session_scan_max（1 亿）
-    # 矛盾：2 亿 ≈ 23 天，但会话累计只有 1 亿 ≈ 11 天，第一次调用就会被会话预检
-    # 拦下 —— 那条单次上限永远够不着，是个假的数字。
-    # 2026-08-27 给装配期检查补了这条跨字段检测，它当场把这里点名了。
-    # 现在压到会话预算之下；真值待业务方定（两个数要一起定）。
-    max_scan_rows: 80000000
+    max_scan_rows: 200000000
+    owner: null
+    source: null
+
+  - name: contract_trade_volume
+    label: 合约成交量
+    dimensions: [symbol, market]
+    requires_time_window: true
+    rows_per_day: 12000000
+    max_scan_rows: 250000000
+    owner: null
+    source: null
+
+  - name: order_count
+    label: 委托笔数
+    dimensions: [symbol, product, market]
+    requires_time_window: true
+    rows_per_day: 24000000
+    max_scan_rows: 250000000
+    owner: null
+    source: null
+
+  - name: liquidation_count
+    label: 强平笔数
+    dimensions: [symbol, market]
+    requires_time_window: true
+    rows_per_day: 35000
+    max_scan_rows: 20000000
     owner: null
     source: null
 
@@ -36,10 +101,73 @@ metrics:
     label: 当前未平仓量
     dimensions: [symbol]
     requires_time_window: false   # 快照类，不需要时间窗
-    # 快照类指标也必须给 rows_per_day —— 一次快照多少行。
-    # 原先这里空着，结果：加了会话累计预算之后，这个指标的扫描量预估变成
-    # 「判定不了」，会话预检按不通过处理，**它就再也查不了了，而且没人知道**。
-    # 2026-08-27 补时区那轮实测撞出来的，随后给装配期检查补了这条检测。
+    # 快照类也必须给 rows_per_day —— 设了会话预算之后，预估不出来的指标
+    # 会被按「判定不了」拒，等于这个指标是死的（2026-08-27 实测撞到过）。
     rows_per_day: 240000
+    owner: null
+    source: null
+
+  # ── 资金 ──────────────────────────────────────────────
+  - name: deposit_amount
+    label: 充值金额
+    dimensions: [coin, market, channel]
+    requires_time_window: true
+    rows_per_day: 150000
+    max_scan_rows: 30000000
+    owner: null
+    source: null
+
+  - name: withdrawal_amount
+    label: 提现金额
+    dimensions: [coin, market, channel]
+    requires_time_window: true
+    rows_per_day: 90000
+    max_scan_rows: 30000000
+    owner: null
+    source: null
+
+  - name: net_deposit
+    label: 净入金
+    dimensions: [coin, market]
+    requires_time_window: true
+    rows_per_day: 240000
+    max_scan_rows: 40000000
+    owner: null
+    source: null
+
+  - name: transfer_volume
+    label: 现货合约划转量
+    dimensions: [coin, direction]
+    requires_time_window: true
+    rows_per_day: 320000
+    max_scan_rows: 40000000
+    owner: null
+    source: null
+
+  # ── 收入 ──────────────────────────────────────────────
+  - name: trading_fee_income
+    label: 交易手续费收入
+    dimensions: [symbol, product, market]
+    requires_time_window: true
+    rows_per_day: 24000000
+    max_scan_rows: 250000000
+    owner: null
+    source: null
+
+  - name: funding_fee_settled
+    label: 资金费结算额
+    dimensions: [symbol]
+    requires_time_window: true
+    rows_per_day: 1800000
+    max_scan_rows: 100000000
+    owner: null
+    source: null
+
+  - name: referral_reward_paid
+    label: 邀请返佣发放额
+    dimensions: [market, tier]
+    requires_time_window: true
+    rows_per_day: 60000
+    max_scan_rows: 20000000
     owner: null
     source: null

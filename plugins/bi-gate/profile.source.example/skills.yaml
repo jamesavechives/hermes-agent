@@ -1,5 +1,8 @@
 # ④ skills —— 技术负责人，变更管控：中
 # CODEOWNERS: /profiles/*/skills.yaml  @技术负责人
+_mock_fields: []
+
 dir: skills/
-# 自演化开着的话，画像写入限制（§八）还没做，等于没有约束。
+# 自演化保持关闭：画像写入限制（§八）还没做，开着等于没有约束。
+# 这一条不是 mock，是有依据的决定 —— 见 Memory 选型 §六。
 self_evolution: false

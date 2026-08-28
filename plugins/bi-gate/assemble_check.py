@@ -177,6 +177,19 @@ def _rules() -> Any:
     return _rules_cache
 
 
+#: 与 build_profile.ENV_MARKER 保持一致。两处各写一份是为了让装配期检查能独立
+#: 分发（CI 里 build_profile 可能不在），有测试守它们一致。
+ENV_MARKER = "# ==== 以下由部署方维护（模型凭据等），不参与 hash ===="
+
+
+def _split_env(text: str) -> Tuple[str, str]:
+    idx = text.find(ENV_MARKER)
+    if idx < 0:
+        return text, ""
+    end = idx + len(ENV_MARKER)
+    return text[:end], text[end:]
+
+
 def _parse_int(value: str) -> Optional[int]:
     """把环境变量里的数字读出来；读不出来返回 None（当成"没设"）。
 
@@ -392,6 +405,29 @@ def check_self_consistency(decl: Dict[str, Any]) -> List[Result]:
                 out.append(Result("会话预算与注册表相容", True,
                                   f"会话上限 {session_max:,} 行，无指标与之矛盾"))
 
+        # 3.5) 红线：不许有指标命中禁止模式。
+        #      这条防的是「以后有人顺手把它登记进来」—— 红线写在声明里，
+        #      但如果没有环节去验，它就只是一段文字。
+        forbidden = registry.get("forbidden_patterns") or []
+        if forbidden:
+            hits = []
+            for m in metrics:
+                nm = str(m.get("name") or "").lower()
+                for pat in forbidden:
+                    if str(pat).lower() in nm:
+                        hits.append(f"{m.get('name')}（命中 {pat}）")
+            if hits:
+                out.append(Result("红线数据未被登记", False,
+                                  f"这些指标命中了 facts.yaml 的 forbidden_patterns，"
+                                  f"红线数据不该进受控事实层：{'、'.join(hits)}"))
+            else:
+                out.append(Result("红线数据未被登记", True,
+                                  f"{len(forbidden)} 条红线，无指标命中"))
+        elif metrics:
+            out.append(Result("红线数据未被登记", None,
+                              "facts.yaml 没有 forbidden_patterns —— 没有任何数据被"
+                              "明令禁止，只剩「没登记就查不了」这一层"))
+
         # 4) 注册表配了指标，但工具白名单里没有 query_metric →
         #    整张表都是死的。白名单在派发路径上先拦，压根走不到指标判定。
         if metrics and tools and "query_metric" not in tools:
@@ -530,16 +566,37 @@ def check_not_hand_edited(decl: Dict[str, Any]) -> List[Result]:
     out: List[Result] = []
     drifted: List[str] = []
     missing: List[str] = []
+    smuggled: List[str] = []
     for name, meta in sorted((data.get("files") or {}).items()):
         f = decl["path"] / name
         if not f.exists():
             missing.append(name)
             continue
         try:
-            actual = hashlib.sha256(f.read_text(encoding="utf-8").encode("utf-8")).hexdigest()
+            text = f.read_text(encoding="utf-8")
         except Exception as exc:
             drifted.append(f"{name}（读不了：{exc}）")
             continue
+
+        if name == ".env":
+            # ``.env`` 只 hash 分界线以上。模型凭据必须由部署方往下面追加 ——
+            # 它不能经过声明文件、不能进仓库。整份都 hash 的话，照 DEPLOY.md
+            # 做就通不过检查（2026-08-28 真去部署时撞到的）。
+            #
+            # 但分界线不能变成后门：``.env`` 是后出现的键覆盖先出现的，在下面写
+            # 一行 BI_GATE_TOOLS=... 就能绕过整套审批，而且 hash 还是对的。
+            # 所以这里额外验下半截没有本该由声明决定的键。
+            head, tail = _split_env(text)
+            for line in tail.splitlines():
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key = line.partition("=")[0].strip()
+                if key.startswith(("BI_GATE_", "BI_AUDIT_", "HERMES_HOME")):
+                    smuggled.append(key)
+            text = head
+
+        actual = hashlib.sha256(text.encode("utf-8")).hexdigest()
         if actual != (meta or {}).get("sha256"):
             drifted.append(name)
 
@@ -549,9 +606,40 @@ def check_not_hand_edited(decl: Dict[str, Any]) -> List[Result]:
         out.append(Result("生成物未被手改", False,
                           f"这些文件和声明生成的结果对不上，说明被手改过（绕过了审批）："
                           f"{'、'.join(drifted)}。重新跑 build_profile.py，或把改动写回声明文件"))
-    if not missing and not drifted:
-        out.append(Result("生成物未被手改", True, f"{len(data.get('files') or {})} 个文件 hash 一致"))
+    if smuggled:
+        out.append(Result(".env 分界线以下没有夹带", False,
+                          f"这些键出现在分界线以下，会覆盖声明生成的值 —— 那是在绕过审批："
+                          f"{'、'.join(sorted(set(smuggled)))}"))
+    if not missing and not drifted and not smuggled:
+        out.append(Result("生成物未被手改", True,
+                          f"{len(data.get('files') or {})} 个文件 hash 一致"
+                          f"（.env 只算分界线以上）"))
     return out
+
+
+def check_mock_fields(decl: Dict[str, Any]) -> List[Result]:
+    """把「哪些值是 mock」摆出来。
+
+    **不判失败** —— mock 是开发阶段的正常状态，为的是不被业务方的排期阻塞。
+    但它必须**可见**：mock 比待定更需要盯，因为待定是空的、一眼看得出，
+    mock 有值、看起来像已经定了。几周之后没人分得清哪个是拍过板的。
+
+    manifest 里没有 mock_fields 说明这个 profile 是旧版工具生成的（或手工建的），
+    报「查不了」而不是「没有 mock」—— 后者是在替它作保。
+    """
+    manifest = decl.get("manifest")
+    if not manifest:
+        return [Result("mock 值", None, "没有 manifest，看不到哪些值是 mock")]
+    if "mock_fields" not in manifest:
+        return [Result("mock 值", None,
+                       "manifest 里没有 mock_fields —— 生成工具是旧版，看不出来")]
+    mocks = manifest.get("mock_fields") or []
+    if not mocks:
+        return [Result("mock 值", True, "没有标为 mock 的字段")]
+    return [Result("mock 值", None,
+                   f"{len(mocks)} 项是我方先填、未经确认："
+                   f"{'、'.join(str(m) for m in mocks[:6])}"
+                   + ("…" if len(mocks) > 6 else ""))]
 
 
 SECTIONS = [
@@ -560,6 +648,7 @@ SECTIONS = [
     ("③ 声明之间自相容", check_self_consistency),
     ("④ action_policy 可解析", check_policy_parses),
     ("⑥ 生成物没被手改", check_not_hand_edited),
+    ("⑦ mock 值（未经确认，不拦部署）", check_mock_fields),
 ]
 
 

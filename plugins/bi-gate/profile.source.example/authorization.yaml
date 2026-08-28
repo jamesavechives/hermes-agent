@@ -2,19 +2,32 @@
 # CODEOWNERS: /profiles/*/authorization.yaml  @技术负责人 @合规
 # 改这个文件等同权限变更，所以它单独成文件、单独设 owner。
 
+_mock_fields:
+  - action_max                # L1 这条线是技术侧设的，待业务方 + 合规确认
+  - session_scan_max          # 3 亿行，取的是"看半年趋势算日常需求"那一档
+  - action_policy.rules       # L0/L1/L2 怎么分，业务方 + 合规定
+
 # 工具白名单。未声明 = 空白名单 = 拦一切，不是「不限制」。
+#
+# 注意这里**没有** memory：BI 人格现在写不了记忆。
+# 这不是疏忽，是 Memory 选型的结论之一（见《Memory 选型 v1.0》§六）——
+# 内置记忆的内容扫描拦得住注入模式，拦不住「以后所有查询默认用 UTC+0」
+# 这种语义上的自我放宽。要不要开，归 §十一第 4 项一起拍。
 tools:
   - query_metric
 
 # 动作上限。未声明按 L0（最严）处理。
-# ⚠ L1 这条线是技术侧随手设的，没人批准过 —— 见《待确认事项》第五节第 1 条。
 action_max: L1
 
-# 会话累计扫描上限。一亿这个数同样是随手取的，待业务方定。
-session_scan_max: 100000000
+# 会话累计扫描上限。3 亿行 ≈ 日活 250 天 / 现货成交量 35 天。
+# 取这一档的依据是「看半年趋势算不算日常需求」——
+#   算   → 3 亿以上，否则正常提问会被莫名其妙拒绝
+#   不算 → 1 亿，助手定位成"看近期"
+# 先按"算"走，免得开发阶段天天撞限额。待业务方定。
+session_scan_max: 300000000
 
 action_policy:
-  version: example-0
+  version: mock-1
   default_level: L0
   rules:
     - level: L1

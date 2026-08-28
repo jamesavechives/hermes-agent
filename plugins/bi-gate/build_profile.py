@@ -35,10 +35,22 @@ Hermes 本身就精确锁了 pyyaml，不是新增的供应链面。
 边角上解析不一致，而这类不一致恰好最难发现 —— 声明看起来是一个意思，生成出来
 是另一个意思。
 
-「待定」和「空着」不是一回事
-----------------------------
-声明里写 ``null`` 表示**明确待定**，工具会把它逐条报出来；漏写字段则直接报错、
-不生成。两者的区别是：待定是有人知道它没定，空着是没人知道。
+三种状态，处理不一样
+--------------------
+==========  ==============================  ========================
+ 状态        怎么写                          工具怎么处理
+==========  ==============================  ========================
+ 空着        漏写这个字段                     **报错，不生成任何文件**
+ 待定        写 ``null``                     生成，逐条报「待定」
+ mock        写值 + 列进 ``_mock_fields``     生成，逐条报「mock，未确认」
+==========  ==============================  ========================
+
+三者的区别是**谁知道它没定**：空着是没人知道；待定是有人知道它没定；
+mock 是我们先填了一个值让开发不阻塞，但**没有人确认过它**。
+
+mock 最危险，因为它看起来是定了的。所以它不能只写在注释里 —— 注释不会被
+``assemble_check`` 读到、不会出现在任何报告里，几周之后没人分得清哪个值是拍过板的。
+``_mock_fields`` 让「这是 mock」变成一条查得到的事实。
 
 用法
 ----
@@ -64,6 +76,47 @@ DECLARATIONS = ("persona", "facts", "authorization", "skills", "fallback")
 
 #: manifest 文件名。放在运行时目录里，跟着 profile 走。
 MANIFEST = ".generated.json"
+
+#: ``.env`` 里的分界线。以上由本工具生成、参与 hash；以下由部署方维护。
+#:
+#: 为什么需要它：模型凭据（DASHSCOPE_API_KEY 之类）**必须**由部署的人往 .env 里
+#: 追加 —— 它不能经过声明文件、不能进仓库。但追加会改变文件内容，于是「生成物
+#: 没被手改」那条检查会当场判失败。
+#:
+#: 这是 2026-08-28 真去部署一个新 profile 时撞出来的：DEPLOY.md 和生成的 .env
+#: 头部都写着"凭据请另行追加"，而照做就通不过检查 —— 两个我们自己建的东西互相
+#: 打架。分界线把「生成的」和「部署方的」在同一个文件里划开。
+ENV_MARKER = "# ==== 以下由部署方维护（模型凭据等），不参与 hash ===="
+
+#: 分界线**以下**不许出现的键前缀。不设这条，分界线就成了后门 ——
+#: ``.env`` 是后出现的键覆盖先出现的，在下面写一行 ``BI_GATE_TOOLS=...``
+#: 就能绕过整套审批，而且 hash 还是对的。
+ENV_TAIL_FORBIDDEN_PREFIXES = ("BI_GATE_", "BI_AUDIT_", "HERMES_HOME")
+
+
+def split_env(text: str) -> Tuple[str, str]:
+    """把 ``.env`` 拆成 (生成的部分, 部署方维护的部分)。
+
+    没有分界线时整份都算生成的 —— 老 profile 兼容。
+    """
+    idx = text.find(ENV_MARKER)
+    if idx < 0:
+        return text, ""
+    end = idx + len(ENV_MARKER)
+    return text[:end], text[end:]
+
+
+def env_tail_violations(tail: str) -> List[str]:
+    """分界线以下有没有本该由声明决定的键。"""
+    out = []
+    for raw in tail.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key = line.partition("=")[0].strip()
+        if key.startswith(ENV_TAIL_FORBIDDEN_PREFIXES):
+            out.append(key)
+    return out
 
 LEVELS = ("L0", "L1", "L2", "L3")
 
@@ -96,6 +149,20 @@ def _load_yaml(path: Path) -> Dict[str, Any]:
 
 def load_declarations(src: Path) -> Dict[str, Dict[str, Any]]:
     return {name: _load_yaml(src / f"{name}.yaml") for name in DECLARATIONS}
+
+
+def collect_mock_fields(decl: Dict[str, Dict[str, Any]]) -> List[str]:
+    """把五个声明文件里的 ``_mock_fields`` 汇总成一张表。
+
+    每一项形如 ``facts.default_timezone`` —— 前缀是哪个声明文件，好知道该找谁改。
+    """
+    out: List[str] = []
+    for name, data in decl.items():
+        fields = data.get("_mock_fields") or []
+        if not isinstance(fields, list):
+            raise DeclError(f"{name}.yaml 的 _mock_fields 必须是列表")
+        out.extend(f"{name}.{f}" for f in fields)
+    return sorted(out)
 
 
 def _require(d: Dict[str, Any], key: str, where: str) -> Any:
@@ -178,9 +245,19 @@ def render_registry(facts: Dict[str, Any]) -> Tuple[str, List[str]]:
     if tz is None:
         pending.append("default_timezone 待定（业务方定，见《待确认事项》第三节）")
 
+    # 红线：永远不该进这个助手的数据。和"没登记"不是一回事 ——
+    # 没登记只是暂时查不了，红线是明令禁止。写进注册表是为了让装配期检查能验：
+    # 防的是以后有人顺手把它们登记进来，而那时候没有任何环节会说话。
+    forbidden = _require(facts, "forbidden_patterns", "facts.yaml") or []
+    if not isinstance(forbidden, list):
+        raise DeclError("facts.yaml 的 forbidden_patterns 必须是列表")
+    if not forbidden:
+        pending.append("forbidden_patterns 是空的 —— 没有任何数据被明令禁止")
+
     body = {
         "_comment": "由 build_profile.py 从 facts.yaml 生成，不要手改。",
         "default_timezone": tz,
+        "forbidden_patterns": [str(x) for x in forbidden],
         "metrics": out,
     }
     return json.dumps(body, ensure_ascii=False, indent=2, sort_keys=False) + "\n", pending
@@ -239,6 +316,7 @@ def render_env(auth: Dict[str, Any], runtime: Path) -> Tuple[str, List[str]]:
         lines.append(f"BI_GATE_SESSION_SCAN_MAX={int(session_max)}")
     lines.append(f"BI_AUDIT_LOG={runtime / 'audit.jsonl'}")
     lines.append("")
+    lines.append(ENV_MARKER)
     return "\n".join(lines), pending
 
 
@@ -282,7 +360,8 @@ def sha256(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def build_manifest(files: Dict[str, str], src: Path) -> str:
+def build_manifest(files: Dict[str, str], src: Path,
+                   mocks: Optional[List[str]] = None) -> str:
     """记录每个生成物的 hash 和它来自哪个声明。
 
     ``assemble_check.py`` 校验这份 manifest。对不上 = 有人手改了生成物 =
@@ -292,14 +371,19 @@ def build_manifest(files: Dict[str, str], src: Path) -> str:
         "_comment": "由 build_profile.py 生成。装配期检查会校验下面的 hash；"
                     "对不上说明生成物被手改过，不允许部署。",
         "source_dir": str(src),
-        "files": {name: {"sha256": sha256(text)} for name, text in sorted(files.items())},
+        # mock 值也进 manifest：assemble_check 读它，好在部署前把「这些值没人确认过」
+        # 摆出来。只写在 yaml 注释里的话，装配期检查看不见，报告里也不会有。
+        "mock_fields": list(mocks or []),
+        # .env 只 hash 分界线以上的部分，见 ENV_MARKER。
+        "files": {name: {"sha256": sha256(split_env(text)[0] if name == ".env" else text)}
+                  for name, text in sorted(files.items())},
     }
     return json.dumps(body, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
 
 
 # ---------------------------------------------------------------------------
 
-def build(src: Path, runtime: Path) -> Tuple[Dict[str, str], List[str]]:
+def build(src: Path, runtime: Path) -> Tuple[Dict[str, str], List[str], List[str]]:
     """返回 (文件名 → 内容, 待定项)。不写盘 —— 写盘由调用方决定，好做 --check。"""
     decl = load_declarations(src)
 
@@ -320,7 +404,7 @@ def build(src: Path, runtime: Path) -> Tuple[Dict[str, str], List[str]]:
         files["action_policy.json"] = policy
 
     pending = p_reg + p_pol + p_env + p_cfg + p_fb
-    return files, pending
+    return files, pending, collect_mock_fields(decl)
 
 
 def main(argv: List[str]) -> int:
@@ -337,7 +421,7 @@ def main(argv: List[str]) -> int:
         return 2
 
     try:
-        files, pending = build(src, runtime)
+        files, pending, mocks = build(src, runtime)
     except DeclError as exc:
         print(f"声明有问题，未生成任何文件：\n  {exc}", file=sys.stderr)
         return 1
@@ -345,7 +429,7 @@ def main(argv: List[str]) -> int:
         print(f"生成器自身出错：{exc}", file=sys.stderr)
         return 2
 
-    manifest = build_manifest(files, src)
+    manifest = build_manifest(files, src, mocks)
 
     if args.check:
         drift = []
@@ -353,8 +437,17 @@ def main(argv: List[str]) -> int:
             cur = runtime / name
             if not cur.exists():
                 drift.append(f"{name}：不存在")
-            elif cur.read_text(encoding="utf-8") != text:
-                drift.append(f"{name}：与声明生成的结果不一致（被手改过，或声明变了没重新生成）")
+            else:
+                actual = cur.read_text(encoding="utf-8")
+                if name == ".env":
+                    actual, tail = split_env(actual)
+                    text = split_env(text)[0]
+                    bad = env_tail_violations(tail)
+                    if bad:
+                        drift.append(f".env：分界线以下出现了本该由声明决定的键："
+                                     f"{'、'.join(bad)} —— 那是在绕过审批")
+                if actual != text:
+                    drift.append(f"{name}：与声明生成的结果不一致（被手改过，或声明变了没重新生成）")
         mpath = runtime / MANIFEST
         if not mpath.exists():
             drift.append(f"{MANIFEST}：不存在")
@@ -364,10 +457,20 @@ def main(argv: List[str]) -> int:
             print(f"  [✗] {d}")
         print(f"\n结论：{'有漂移 ✗' if drift else '生成物与声明一致 ✓'}")
         _report_pending(pending)
+        _report_mocks(mocks)
         return 1 if drift else 0
 
     runtime.mkdir(parents=True, exist_ok=True)
     for name, text in sorted(files.items()):
+        if name == ".env" and (runtime / name).exists():
+            # 重新生成时**保留部署方那半截** —— 否则每次 regen 都会把凭据抹掉，
+            # 而抹掉之后的表现是"模型调不通"，跟门禁一点关系都没有，很难查。
+            _, tail = split_env((runtime / name).read_text(encoding="utf-8"))
+            if tail.strip():
+                text = text + tail
+                print(f"  [✓] {name}（保留了部署方维护的 {len(tail.strip().splitlines())} 行）")
+                (runtime / name).write_text(text, encoding="utf-8")
+                continue
         (runtime / name).write_text(text, encoding="utf-8")
         print(f"  [✓] {name}")
     (runtime / MANIFEST).write_text(manifest, encoding="utf-8")
@@ -381,7 +484,17 @@ def main(argv: List[str]) -> int:
         print("  [!] 声明目录里没有 approvals.json —— 装配期检查会判不允许部署")
 
     _report_pending(pending)
+    _report_mocks(mocks)
     return 0
+
+
+def _report_mocks(mocks: List[str]) -> None:
+    if not mocks:
+        return
+    print(f"\nmock 值 {len(mocks)} 项（**已在跑，但没有人确认过**）：")
+    for m in mocks:
+        print(f"  [~] {m}")
+    print("mock 比待定更需要盯：待定是空的、一眼看得出；mock 有值，看起来像定了。")
 
 
 def _report_pending(pending: List[str]) -> None:

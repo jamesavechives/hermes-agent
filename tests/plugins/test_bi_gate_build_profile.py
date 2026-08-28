@@ -260,3 +260,158 @@ def test_approvals_are_not_part_of_the_hash(tmp_path, bp):
     assert _run_check(runtime).returncode == 0
     manifest = json.loads((runtime / ".generated.json").read_text(encoding="utf-8"))
     assert "approvals.json" not in manifest["files"]
+
+
+# ---------------------------------------------------------------------------
+# mock 值与红线（2026-08-28 加）
+# ---------------------------------------------------------------------------
+
+def test_mock_fields_are_reported_and_land_in_the_manifest(tmp_path):
+    """mock 值必须被点名，而且要进 manifest。
+
+    mock 比待定更需要盯：待定是空的、一眼看得出；**mock 有值，看起来像定了**。
+    只写在 yaml 注释里的话，装配期检查读不到、报告里不会有，几周之后没人分得清
+    哪个值是拍过板的。
+    """
+    src = _copy_source(tmp_path / "src")
+    runtime = tmp_path / "rt"
+    proc = _run_build(src, runtime)
+    assert proc.returncode == 0, proc.stderr
+    assert "mock 值" in proc.stdout and "没有人确认过" in proc.stdout
+
+    manifest = json.loads((runtime / ".generated.json").read_text(encoding="utf-8"))
+    mocks = manifest.get("mock_fields")
+    assert mocks, "manifest 里没有 mock_fields —— 装配期检查就看不到了"
+    assert any(m.startswith("facts.") for m in mocks)
+    assert any(m.startswith("authorization.") for m in mocks)
+
+
+def test_assemble_check_reports_mocks_without_blocking(tmp_path):
+    """mock 不拦部署，但必须出现在报告里。
+
+    拦部署是错的：mock 就是为了不被业务方排期阻塞。但不报出来更错 ——
+    那等于替一个没人确认过的值作保。
+    """
+    src = _copy_source(tmp_path / "src")
+    runtime = tmp_path / "rt"
+    assert _run_build(src, runtime).returncode == 0
+    check = _run_check(runtime)
+    assert check.returncode == 0, check.stdout
+    assert "未经确认" in check.stdout
+
+
+def test_a_metric_hitting_a_red_line_blocks_deploy(tmp_path):
+    """登记了红线数据 → 不允许部署。
+
+    红线和「没登记」不是一回事：没登记只是暂时查不了，红线是明令禁止。
+    这条防的是**以后有人顺手把它登记进来** —— 红线写在声明里，
+    但如果没有环节去验，它就只是一段文字。
+    """
+    src = _copy_source(tmp_path / "src")
+    facts = src / "facts.yaml"
+    facts.write_text(facts.read_text(encoding="utf-8").replace(
+        "metrics:\n",
+        "metrics:\n"
+        "  - name: user_balance_detail\n"
+        "    label: 单用户资金明细\n"
+        "    dimensions: [coin]\n"
+        "    requires_time_window: true\n"
+        "    rows_per_day: 1000\n"
+        "    owner: null\n"
+        "    source: null\n\n", 1), encoding="utf-8")
+
+    runtime = tmp_path / "rt"
+    assert _run_build(src, runtime).returncode == 0, "红线是装配期的事，生成本身不该失败"
+    check = _run_check(runtime)
+    assert check.returncode == 1
+    assert "user_balance_detail" in check.stdout and "user_balance" in check.stdout
+
+
+def test_forbidden_patterns_reach_the_generated_registry(tmp_path):
+    """红线要写进生成的注册表 —— 装配期检查读的是那份，不是声明。"""
+    src = _copy_source(tmp_path / "src")
+    runtime = tmp_path / "rt"
+    assert _run_build(src, runtime).returncode == 0
+    reg = json.loads((runtime / "bi_registry.json").read_text(encoding="utf-8"))
+    assert reg.get("forbidden_patterns"), "注册表里没有 forbidden_patterns"
+    assert "kyc" in reg["forbidden_patterns"]
+
+
+# ---------------------------------------------------------------------------
+# .env 的分界线：凭据要能追加，但不能变成后门
+# ---------------------------------------------------------------------------
+
+def _append_env(runtime: Path, line: str) -> None:
+    with open(runtime / ".env", "a", encoding="utf-8") as fh:
+        fh.write(line + "\n")
+
+
+def test_credentials_can_be_appended_below_the_marker(tmp_path):
+    """模型凭据必须能往 .env 里追加而不破坏 hash。
+
+    这是 2026-08-28 真去部署一个新 profile 时撞出来的：DEPLOY.md 和生成的 .env
+    头部都写着"凭据请另行追加"，而照做就通不过「生成物没被手改」——
+    **两个我们自己建的东西互相打架**。分界线把两半在同一个文件里划开。
+    """
+    src = _copy_source(tmp_path / "src")
+    runtime = tmp_path / "rt"
+    assert _run_build(src, runtime).returncode == 0
+    _append_env(runtime, "DASHSCOPE_API_KEY=sk-fake-for-test")
+    assert _run_check(runtime).returncode == 0, "追加凭据不该让检查失败"
+
+
+def test_the_marker_is_not_a_backdoor(tmp_path):
+    """分界线以下不许出现本该由声明决定的键。
+
+    ``.env`` 是**后出现的键覆盖先出现的**，所以在分界线下面写一行
+    ``BI_GATE_TOOLS=query_metric,terminal`` 就能给自己加一个工具，
+    而上半截的 hash 还是对的 —— 分界线就成了绕过整套审批的后门。
+    """
+    src = _copy_source(tmp_path / "src")
+    runtime = tmp_path / "rt"
+    assert _run_build(src, runtime).returncode == 0
+    _append_env(runtime, "BI_GATE_TOOLS=query_metric,terminal")
+    check = _run_check(runtime)
+    assert check.returncode == 1, f"夹带没被拦：\n{check.stdout}"
+    assert "绕过审批" in check.stdout and "BI_GATE_TOOLS" in check.stdout
+
+
+def test_editing_above_the_marker_is_still_caught(tmp_path):
+    """分界线**以上**照旧受 hash 保护 —— 分界线只放开下半截。"""
+    src = _copy_source(tmp_path / "src")
+    runtime = tmp_path / "rt"
+    assert _run_build(src, runtime).returncode == 0
+    env = runtime / ".env"
+    env.write_text(env.read_text(encoding="utf-8").replace(
+        "BI_GATE_ACTION_MAX=L1", "BI_GATE_ACTION_MAX=L3"), encoding="utf-8")
+    assert _run_check(runtime).returncode == 1
+
+
+def test_regenerating_keeps_the_operator_section(tmp_path):
+    """重新生成不能抹掉部署方追加的内容。
+
+    抹掉之后的表现是"模型调不通"——跟门禁一点关系都没有，很难查到是重新生成
+    干的。
+    """
+    src = _copy_source(tmp_path / "src")
+    runtime = tmp_path / "rt"
+    assert _run_build(src, runtime).returncode == 0
+    _append_env(runtime, "DASHSCOPE_API_KEY=sk-fake-for-test")
+    assert _run_build(src, runtime).returncode == 0
+    assert "sk-fake-for-test" in (runtime / ".env").read_text(encoding="utf-8")
+    assert _run_check(runtime).returncode == 0
+
+
+def test_env_marker_matches_on_both_sides(tmp_path, bp):
+    """两处各写了一份分界线常量（为了能独立分发），必须一致。
+
+    不一致的后果最坏：生成器认为下半截不参与 hash、检查器认为整份都算，
+    于是每次部署都失败；或者反过来，检查器认不出分界线，夹带就没人管。
+    """
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "ac_for_marker", PLUGIN_DIR / "assemble_check.py")
+    ac = importlib.util.module_from_spec(spec)
+    sys.modules["ac_for_marker"] = ac
+    spec.loader.exec_module(ac)
+    assert bp.ENV_MARKER == ac.ENV_MARKER

@@ -120,9 +120,23 @@ python /opt/hermes/plugins/bi-gate/verify.py
 新建 profile 照着样例来：
 
 ```bash
-/opt/hermes/plugins/bi-gate/make_example_profile.sh /data/profiles/<名字>
-# 然后自己往 .env 里补模型凭据 —— 样例里刻意没有，也不该经过仓库
+# 从五个声明文件生成（推荐）
+/opt/hermes/plugins/bi-gate/build_profile.py \
+    /opt/hermes/plugins/bi-gate/profile.source.example /data/profiles/<名字>
+
+# 模型凭据往 .env **分界线以下**追加。分界线长这样：
+#   # ==== 以下由部署方维护（模型凭据等），不参与 hash ====
+# 以上由工具生成、受 hash 保护；以下随便加，重新生成也不会被抹掉。
+grep -E '^DASHSCOPE' /data/profiles/<别的profile>/.env >> /data/profiles/<名字>/.env
 ```
+
+> **分界线不是后门。** `.env` 是后出现的键覆盖先出现的，所以在下面写一行
+> `BI_GATE_TOOLS=...` 本来能绕过整套审批而 hash 还是对的。装配期检查会验
+> 分界线以下没有 `BI_GATE_*` / `BI_AUDIT_*` / `HERMES_HOME`，有就判不允许部署。
+>
+> 这一节原先写的是「用 `make_example_profile.sh`，然后自己补凭据」——
+> 那条路会让「生成物没被手改」当场判失败：**DEPLOY.md 让你做的事，
+> 和另一条检查禁止的事，是同一件。** 2026-08-28 真去部署一个新 profile 时撞到的。
 
 CI（`.github/workflows/bi-gate.yaml`）跑的是同一个检查器，但输入是样例 profile：
 它挡的是「有人把检查器改坏了」，挡不了「这台机器上这份真声明不合法」。
