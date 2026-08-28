@@ -182,13 +182,19 @@ class App:
         subject = str(ident.get("claimed") or "")
         entry = None
         for key, item in self.principals.items():
-            if item.get("subject") == subject or key == subject:
+            # key / subject / aliases 都认 —— Teleport 给的是用户名，
+            # 飞书给的是 open_id，同一个人挂在同一条下面。
+            if (item.get("subject") == subject or key == subject
+                    or subject in (item.get("aliases") or ())):
                 entry, platform_id = item, key
                 break
         if entry is None:
             return {"ok": False, "stage": "身份",
-                    "message": "这个身份不在主体名单里。名单由业务方维护 —— "
-                               "要加人得先登记，助手不认自己编的身份。"}
+                    "message": f"「{subject}」不在主体名单里。\n\n"
+                               f"名单由业务方维护 —— 要加人得先登记，"
+                               f"助手不认没登记的身份。\n"
+                               f"（如果你是通过 Teleport 登录的，"
+                               f"需要把你的 Teleport 用户名加进名单的 aliases 里。）"}
 
         args: Dict[str, Any] = {
             "metric": body.get("metric"),

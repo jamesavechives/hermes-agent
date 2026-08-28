@@ -75,7 +75,19 @@ from typing import Any, Dict, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-#: 主体映射表。平台身份（如飞书 open_id）→ 数据层认识的主体。
+#: 主体映射表。平台身份 → 数据层认识的主体。
+#:
+#: 同一个人在不同入口的标识不一样：飞书给的是 ``open_id``（ou_xxx），
+#: Teleport 给的是用户名（james.qian）。所以每条主体可以带一个 ``aliases``
+#: 列表，把这个人所有的标识挂在同一条下面 —— 而不是登记两遍。
+#: 登记两遍的话，改一处忘一处，同一个人在两个入口的数据范围就会不一致。
+#:
+#: .. code-block:: json
+#:
+#:     {"principals": {
+#:       "ou_abc123": {"subject": "bi_tex", "display": "Tex",
+#:                     "aliases": ["tex.wang", "ou_abc123"]}
+#:     }}
 #: 这张表由谁维护、怎么同步，是业务方/合规的事（§十一）。此刻先用文件 mock，
 #: 但**映射不到就拒绝**，不 mock 成"放行"。
 PRINCIPAL_MAP_ENV = "BI_GATE_PRINCIPAL_MAP"
@@ -233,6 +245,10 @@ def _load_principal_map() -> Optional[Dict[str, Dict[str, Any]]]:
         if not isinstance(item, dict) or not item.get("subject"):
             logger.error("bi-gate: 主体映射条目非法，已跳过：%r=%r", key, item)
             continue
+        aliases = item.get("aliases")
+        if aliases is not None and not isinstance(aliases, list):
+            logger.error("bi-gate: 主体 %r 的 aliases 不是列表，已跳过整条", key)
+            continue
         clean[str(key)] = item
     logger.info("bi-gate: 载入主体映射 %d 条（来自 %s）", len(clean), path)
     return clean
@@ -328,8 +344,19 @@ def resolve_principal() -> IdentityVerdict:
     entry = None
     matched_key = ""
     for key in (sess.get("user_id_alt") or "", platform_id):
-        if key and key in pmap:
+        if not key:
+            continue
+        if key in pmap:
             entry, matched_key = pmap[key], key
+            break
+        # 同一个人在不同入口有不同的身份标识：飞书是 open_id，Teleport 是用户名。
+        # 名单按「一个人一条，底下挂多个标识」组织，否则同一个人要登记两遍，
+        # 两遍必然会漂移 —— 和「两份注册表」是同一个毛病。
+        for k, item in pmap.items():
+            if key in (item.get("aliases") or ()):
+                entry, matched_key = item, key
+                break
+        if entry is not None:
             break
     if entry is None:
         return IdentityVerdict(

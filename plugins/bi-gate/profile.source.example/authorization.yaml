@@ -68,7 +68,14 @@ allowed_origins:
 
 # 平台身份 → 数据层主体。这张表的真名单、谁维护、怎么同步，是业务方的事。
 # 这里的是 mock，但**映射不到就拒绝** —— 不 mock 成"放行"。
+# 每条 = 一个人。aliases 里挂这个人在各个入口的标识：
+#   飞书给的是 open_id（ou_xxx），Teleport 给的是用户名（james.qian）。
+# 一个人只登记一条，别按入口拆成两条 —— 拆了就会改一处忘一处，
+# 同一个人在两个入口的数据范围就不一致了（和「两份注册表」同一个毛病）。
 principals:
   ou_mock_analyst_001:
     subject: bi_analyst_mock
     display: 示例分析师（mock）
+    aliases:
+      - ou_mock_analyst_001      # 飞书 open_id
+      - mock.analyst             # Teleport 用户名

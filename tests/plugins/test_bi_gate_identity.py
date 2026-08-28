@@ -377,3 +377,76 @@ def test_identity_rejection_does_not_invite_the_model_to_supply_one(ident, monke
     assert "不是调用参数" in r, f"没说清身份不来自参数：{r}"
     assert "索要" in r, f"没有明说不要向用户要身份：{r}"
     assert "聊天" in r, f"没给出真正的出路：{r}"
+
+
+# ---------------------------------------------------------------------------
+# 一个人，多个入口
+# ---------------------------------------------------------------------------
+
+@pytest.mark.no_bi_identity
+def test_one_person_can_have_several_platform_ids(ident, monkeypatch, tmp_path):
+    """同一个人在飞书是 open_id、在 Teleport 是用户名 —— 挂同一条主体下。
+
+    2026-08-28 差点漏掉的：主体名单是按飞书 open_id 建的，而 Teleport 模式下
+    身份是 Teleport 用户名。照原样接通的话，**所有人都会被拒**，包括名单里
+    本来就有的人。
+
+    为什么不允许同一个人登记两条：改一处忘一处，同一个人在两个入口的数据范围
+    就不一致了。和「两份注册表」是同一个毛病。
+    """
+    from gateway.session_context import set_session_vars, clear_session_vars
+    p = tmp_path / "principals.json"
+    p.write_text(json.dumps({"principals": {
+        "ou_feishu_abc": {"subject": "bi_tex", "display": "Tex",
+                          "aliases": ["ou_feishu_abc", "tex.wang"]},
+    }}, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setenv("BI_GATE_PRINCIPAL_MAP", str(p))
+    ident.reload_principal_map()
+
+    for platform_id in ("ou_feishu_abc", "tex.wang"):
+        tokens = set_session_vars(platform="x", user_id=platform_id)
+        try:
+            v = ident.resolve_principal()
+        finally:
+            clear_session_vars(tokens)
+        assert v.ok, f"{platform_id} 认不出来：{v.reason}"
+        assert v.principal.subject == "bi_tex"
+
+
+@pytest.mark.no_bi_identity
+def test_alias_does_not_let_unlisted_people_in(ident, monkeypatch, tmp_path):
+    """aliases 是给已登记的人加标识，不是放宽名单。"""
+    from gateway.session_context import set_session_vars, clear_session_vars
+    p = tmp_path / "principals.json"
+    p.write_text(json.dumps({"principals": {
+        "ou_a": {"subject": "s", "aliases": ["a.one"]},
+    }}, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setenv("BI_GATE_PRINCIPAL_MAP", str(p))
+    ident.reload_principal_map()
+    tokens = set_session_vars(platform="x", user_id="不在名单里的人")
+    try:
+        v = ident.resolve_principal()
+    finally:
+        clear_session_vars(tokens)
+    assert not v.ok and v.code == ident.REJECT_UNKNOWN_PRINCIPAL
+
+
+@pytest.mark.no_bi_identity
+def test_malformed_aliases_drops_the_whole_entry(ident, monkeypatch, tmp_path):
+    """aliases 写错格式 → 整条不收，不是「忽略这个字段继续用」。
+
+    静默忽略等于这个人还能进来但少了一半标识 —— 那种半通不通最难查。
+    """
+    from gateway.session_context import set_session_vars, clear_session_vars
+    p = tmp_path / "principals.json"
+    p.write_text(json.dumps({"principals": {
+        "ou_a": {"subject": "s", "aliases": "写成字符串了"},
+    }}, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setenv("BI_GATE_PRINCIPAL_MAP", str(p))
+    ident.reload_principal_map()
+    tokens = set_session_vars(platform="x", user_id="ou_a")
+    try:
+        v = ident.resolve_principal()
+    finally:
+        clear_session_vars(tokens)
+    assert not v.ok
