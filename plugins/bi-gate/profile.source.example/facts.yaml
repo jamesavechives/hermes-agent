@@ -23,11 +23,12 @@ metrics:
     dimensions: [symbol, market]
     requires_time_window: true
     rows_per_day: 8600000
-    # ⚠ 这个值和 authorization.yaml 的 session_scan_max 是矛盾的：
-    # 2 亿行 ≈ 23 天，但会话累计上限只有 1 亿 ≈ 11 天 ——
-    # 一个「合法」的单次查询会直接把整个会话额度用超，这个上限根本够不着。
-    # 装配期检查会点名（见 assemble_check 第 3 项）。两个数要一起定。
-    max_scan_rows: 200000000
+    # 原先这里写的是 2 亿。那和 authorization.yaml 的 session_scan_max（1 亿）
+    # 矛盾：2 亿 ≈ 23 天，但会话累计只有 1 亿 ≈ 11 天，第一次调用就会被会话预检
+    # 拦下 —— 那条单次上限永远够不着，是个假的数字。
+    # 2026-08-27 给装配期检查补了这条跨字段检测，它当场把这里点名了。
+    # 现在压到会话预算之下；真值待业务方定（两个数要一起定）。
+    max_scan_rows: 80000000
     owner: null
     source: null
 
@@ -35,5 +36,10 @@ metrics:
     label: 当前未平仓量
     dimensions: [symbol]
     requires_time_window: false   # 快照类，不需要时间窗
+    # 快照类指标也必须给 rows_per_day —— 一次快照多少行。
+    # 原先这里空着，结果：加了会话累计预算之后，这个指标的扫描量预估变成
+    # 「判定不了」，会话预检按不通过处理，**它就再也查不了了，而且没人知道**。
+    # 2026-08-27 补时区那轮实测撞出来的，随后给装配期检查补了这条检测。
+    rows_per_day: 240000
     owner: null
     source: null

@@ -177,6 +177,17 @@ def _rules() -> Any:
     return _rules_cache
 
 
+def _parse_int(value: str) -> Optional[int]:
+    """把环境变量里的数字读出来；读不出来返回 None（当成"没设"）。
+
+    刻意不抛异常：这里只是为了做跨字段比对，值本身合不合法由运行时那边报。
+    """
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+
+
 def _load_json(path_str: str) -> Tuple[Optional[Any], str]:
     if not path_str:
         return None, "未声明路径"
@@ -323,20 +334,71 @@ def check_self_consistency(decl: Dict[str, Any]) -> List[Result]:
             else:
                 out.append(Result("human_review_from", True, level_name(hr_level)))
 
-    # 注册表：声明了扫描上限却没有 rows_per_day 的指标，任何查询都会被拒。
+    # ── 注册表相关的跨字段矛盾 ────────────────────────────────
+    # 这几条抓的都是「每条单看都合法、合起来做不了事」。它们不会报错、不会拦人，
+    # 只会让某个指标安静地查不了，然后被当成"模型不行"。
+    session_max = _parse_int(env.get("BI_GATE_SESSION_SCAN_MAX", ""))
+    tools = {x.strip() for x in env.get("BI_GATE_TOOLS", "").split(",") if x.strip()}
+
     registry, err = _load_json(env.get("BI_GATE_REGISTRY", ""))
     if registry is None:
         out.append(Result("注册表可读", False, err))
     else:
         metrics = registry.get("metrics", [])
+
+        # 0) 空注册表 —— 是 fail-closed 的正确方向，但要说出来。
+        #    原先这里 0 个指标也报 ✓（"0 个指标"），看着像通过。
+        if not metrics:
+            out.append(Result("注册表非空", False,
+                              "注册表里一个指标都没有 —— 所有 query_metric 都会被拒。"
+                              "方向是对的（fail-closed），但这个人格现在什么都查不了"))
+
+        # 1) 声明了扫描上限却没有 rows_per_day → 预估不出来 → 该指标任何查询都被拒
         broken = [m.get("name") for m in metrics
                   if m.get("max_scan_rows") is not None and m.get("rows_per_day") is None]
         if broken:
             out.append(Result("注册表扫描量声明完整", False,
                               f"这些指标声明了 max_scan_rows 却没有 rows_per_day，"
                               f"任何查询都会被拒：{'、'.join(str(b) for b in broken)}"))
-        else:
+        elif metrics:
             out.append(Result("注册表扫描量声明完整", True, f"{len(metrics)} 个指标"))
+
+        # 2) 设了会话预算，但指标没有 rows_per_day → 预估是 UNDECIDABLE →
+        #    会话预检按「判定不了」拒。**注意这跟第 1 条不是同一件事**：
+        #    第 1 条要求「声明了上限」，这条连上限都没声明也会中招。
+        #    2026-08-27 实测撞到的：current_open_interest 既没有 rows_per_day
+        #    也没有 max_scan_rows，加了会话预算之后它就再也查不了，而且没人知道。
+        if session_max is not None:
+            no_rpd = [m.get("name") for m in metrics if m.get("rows_per_day") is None]
+            if no_rpd:
+                out.append(Result("会话预算与注册表相容", False,
+                                  f"设了 BI_GATE_SESSION_SCAN_MAX，但这些指标没有 rows_per_day，"
+                                  f"预估不出扫描量 → 会话预检按「判定不了」拒 → "
+                                  f"这些指标任何查询都做不了：{'、'.join(str(n) for n in no_rpd)}"))
+
+            # 3) 单次上限高于会话预算 → 那个上限永远够不着。
+            #    不会让指标不可用（预算以下照常），但那条上限是假的 ——
+            #    看配置的人会以为单次能查到 2 亿行，实际 1 亿就被会话预检拦了。
+            unreachable = [(m.get("name"), m.get("max_scan_rows")) for m in metrics
+                           if isinstance(m.get("max_scan_rows"), int)
+                           and m["max_scan_rows"] > session_max]
+            if unreachable:
+                detail = "、".join(f"{n}({v:,} > {session_max:,})" for n, v in unreachable)
+                out.append(Result("单次上限与会话预算相容", False,
+                                  f"这些指标的 max_scan_rows 高于会话累计预算，"
+                                  f"那个单次上限永远够不着（第一次调用就会被会话预检拦下）：{detail}。"
+                                  f"两个数要一起定"))
+            if not no_rpd and not unreachable and metrics:
+                out.append(Result("会话预算与注册表相容", True,
+                                  f"会话上限 {session_max:,} 行，无指标与之矛盾"))
+
+        # 4) 注册表配了指标，但工具白名单里没有 query_metric →
+        #    整张表都是死的。白名单在派发路径上先拦，压根走不到指标判定。
+        if metrics and tools and "query_metric" not in tools:
+            out.append(Result("工具白名单与注册表相容", False,
+                              f"注册表里有 {len(metrics)} 个指标，但 BI_GATE_TOOLS 里没有 "
+                              f"query_metric（当前：{'、'.join(sorted(tools))}）—— "
+                              f"整张注册表都用不上，调用在白名单那一关就被拦了"))
 
         # 统计时区。需要时间窗的指标才受影响 —— 快照类指标没有窗口，就没有歧义。
         needs_window = [m.get("name") for m in metrics

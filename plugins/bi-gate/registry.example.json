@@ -1,5 +1,5 @@
 {
-  "_comment": "示例注册表。首批 10-12 个核心指标，口径/责任人/新鲜度在指标层维护，这里只放门禁需要的字段。声明了 max_scan_rows 就必须同时声明 rows_per_day —— 否则扫描量预估不出来，门禁按「判定不了」拒绝该指标的全部查询。",
+  "_comment": "示例注册表。首批 10-12 个核心指标，口径/责任人/新鲜度在指标层维护，这里只放门禁需要的字段。两条跨字段约束（装配期检查会验）：(1) 每个指标都要有 rows_per_day —— 设了会话累计预算之后，预估不出来就会被按「判定不了」拒，连没声明 max_scan_rows 的快照指标也一样；(2) max_scan_rows 不能高于会话累计预算，否则那条上限永远够不着。",
   "version": "example-0",
   "_timezone_comment": "统计时区。null = 业务方还没定 —— 那样需要时间窗的指标必须在调用里显式带时区，否则被拦。样例里给 UTC+8 是为了让 verify.py 的正例跑得通，真 profile 的值要业务方定。",
   "default_timezone": "UTC+8",
@@ -21,7 +21,7 @@
         "market"
       ],
       "requires_time_window": true,
-      "max_scan_rows": 200000000,
+      "max_scan_rows": 80000000,
       "rows_per_day": 8600000
     },
     {
@@ -29,7 +29,8 @@
       "dimensions": [
         "symbol"
       ],
-      "requires_time_window": false
+      "requires_time_window": false,
+      "rows_per_day": 240000
     }
   ]
 }
