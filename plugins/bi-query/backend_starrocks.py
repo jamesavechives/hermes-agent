@@ -111,10 +111,13 @@ def _conn() -> Dict[str, str]:
 
 _registry_cache: Optional[Dict[str, Dict[str, Any]]] = None
 _registry_path: Optional[str] = None
+#: 注册表顶层的数据性质声明。见 build_registry_from_ads 里 data_notice 的说明 ——
+#: 声明挂在数据上，不挂在后端上，否则换个后端它就静默消失了。
+_registry_notice: Optional[str] = None
 
 
 def _load_registry() -> Dict[str, Dict[str, Any]]:
-    global _registry_cache, _registry_path
+    global _registry_cache, _registry_path, _registry_notice
     path = os.environ.get(REGISTRY_ENV, "").strip()
     if _registry_cache is not None and path == _registry_path:
         return _registry_cache
@@ -131,12 +134,20 @@ def _load_registry() -> Dict[str, Dict[str, Any]]:
         if name:
             out[name] = item
     _registry_cache, _registry_path = out, path
+    _registry_notice = raw.get("data_notice")
     return out
 
 
+def data_notice() -> Optional[str]:
+    """注册表声明的数据性质（复刻库/造数等）。载入前返回 None。"""
+    _load_registry()
+    return _registry_notice
+
+
 def reload_registry() -> None:
-    global _registry_cache
+    global _registry_cache, _registry_notice
     _registry_cache = None
+    _registry_notice = None
 
 
 def _ident(value: Any, what: str) -> str:
@@ -281,6 +292,8 @@ def run(metric: str, dimensions: Optional[List[str]], window: Any,
             "这类指标请按天看，不要看合计。",
         "freshness": spec.get("freshness"),
         "metric_description": spec.get("description"),
+        "data_notice": _registry_notice,
+        "schema": (spec.get("source") or {}).get("schema"),
     }
 
 

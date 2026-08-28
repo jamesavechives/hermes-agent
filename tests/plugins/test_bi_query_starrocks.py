@@ -233,3 +233,74 @@ def test_result_carries_the_aggregation_caveat(sr, monkeypatch):
     assert out["aggregation"] == "SUM"
     assert "去重人数" in out["aggregation_caveat"]
     assert out["freshness"]["data_end"] == "2026-07-16"
+
+
+# ---------------------------------------------------------------------------
+# 数据性质声明：挂在数据上，不挂在后端上
+# ---------------------------------------------------------------------------
+
+def test_data_notice_rides_with_the_registry(tmp_path, monkeypatch):
+    """复刻库/造数的声明必须从注册表一路带到模型看到的 meta 里。
+
+    2026-08-28 真跑模型踩到的：桩数据后端的 meta 里有一句「非真实业务数值，
+    不可用于对外结论」，实测模型每次都会主动声明。切到 starrocks 后端之后
+    **那句话静默消失了** —— 而当时连的是 dev 复刻库，数值仍然是造的。
+    模型于是对着一堆假数写出了「周末积累、周初释放」「疑似运营活动消退」
+    这样的业务分析，一个字都没提数据是假的。
+
+    和「加一层前置检查让后面几层的验证静默失效」是同一个形状：
+    **换掉一个组件，会让挂在旧组件上的免责声明一起消失，而没有任何东西会报错。**
+    所以声明挂在数据（注册表）上，不挂在后端上。
+    """
+    reg = dict(REGISTRY)
+    reg["data_notice"] = "⚠️ 这是复刻库，数值全部是造出来的"
+    path = tmp_path / "reg.json"
+    path.write_text(json.dumps(reg, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setenv("BI_GATE_REGISTRY", str(path))
+    monkeypatch.setenv("BI_QUERY_BACKEND", "starrocks")
+    monkeypatch.setenv("BI_SR_HOST", "h")
+    monkeypatch.setenv("BI_SR_USER", "u")
+    monkeypatch.setenv("BI_AUDIT_LOG", str(tmp_path / "a.jsonl"))
+
+    import subprocess
+    mod = _load("bi_query_notice_sr", QUERY_DIR / "backend_starrocks.py")
+    mod.reload_registry()
+    monkeypatch.setattr(mod.subprocess, "run", lambda *a, **k:
+                        subprocess.CompletedProcess([], 0, stdout="2026-07-01\t10\n", stderr=""))
+    out = mod.run("overall.dau", None, W, P, "c")
+    assert "造出来的" in (out.get("data_notice") or "")
+
+    # bi-query 在函数体里 `from . import backend_starrocks`，拿不到稳定的模块引用，
+    # 所以直接打 stdlib 的 subprocess.run（monkeypatch 会在用例结束时还原）。
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k:
+                        subprocess.CompletedProcess([], 0, stdout="2026-07-01\t10\n", stderr=""))
+    bq = _load("bi_query_notice_tool", QUERY_DIR / "__init__.py")
+    bq.reload_fixtures()
+    payload = json.loads(bq.handle_query_metric({
+        "metric": "overall.dau", "time_window": W,
+        "_bi_principal": P, "_bi_gate_call_id": "c"}))
+    assert "造出来的" in payload["meta"].get("note", ""), payload["meta"]
+
+
+def test_production_registry_has_no_synthetic_notice():
+    """对着生产 ads 生成的注册表不该带复刻声明 —— 否则真数据会被说成假的。
+
+    反过来同样是错：把真数说成假数，用户就不敢用了。声明必须准确，不是"多说一句
+    总没错"。
+    """
+    path = REPO / "plugins" / "bi-gate" / "registry.ads.json"
+    if not path.exists():
+        pytest.skip("仓库里没有生产版注册表")
+    reg = json.loads(path.read_text(encoding="utf-8"))
+    assert reg.get("data_notice") in (None, ""), reg.get("data_notice")
+    assert all(m["source"]["schema"] == "ads" for m in reg["metrics"])
+
+
+def test_dev_registry_declares_itself_synthetic():
+    path = REPO / "plugins" / "bi-gate" / "registry.dev.json"
+    if not path.exists():
+        pytest.skip("仓库里没有 dev 复刻版注册表")
+    reg = json.loads(path.read_text(encoding="utf-8"))
+    notice = reg.get("data_notice") or ""
+    assert "造出来的" in notice or "复刻" in notice, notice
+    assert all(m["source"]["schema"] != "ads" for m in reg["metrics"])

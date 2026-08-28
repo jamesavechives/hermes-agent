@@ -1,6 +1,6 @@
 {
   "default_timezone": null,
-  "generated_from": "ads（StarRocks 元数据）",
+  "generated_from": "bi_agent_dev（StarRocks 元数据）",
   "metrics": [
     {
       "name": "asset_daily_stat.asset_balance_gt_0_uv",
@@ -12,16 +12,16 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_asset_daily_stat_di",
         "column": "asset_balance_gt_0_uv",
         "time_column": "bizdate",
         "table_description": "全站资沉统计"
       },
       "freshness": {
-        "data_start": "2026-05-31",
-        "data_end": "2026-06-23",
-        "etl_time": "2026-06-24 08:49:44"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -34,16 +34,16 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_asset_daily_stat_di",
         "column": "total_asset_balance",
         "time_column": "bizdate",
         "table_description": "全站资沉统计"
       },
       "freshness": {
-        "data_start": "2026-05-31",
-        "data_end": "2026-06-23",
-        "etl_time": "2026-06-24 08:49:44"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -54,20 +54,20 @@
         "bd_name"
       ],
       "requires_time_window": true,
-      "rows_per_day": 5,
-      "max_scan_rows": 200,
+      "rows_per_day": 3,
+      "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_bd_refer_trade_daily_stat_di",
         "column": "DAUC",
         "time_column": "bizdate",
         "table_description": "BD拉新、交易、返佣、出金日报"
       },
       "freshness": {
-        "data_start": "2026-04-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -78,20 +78,20 @@
         "bd_name"
       ],
       "requires_time_window": true,
-      "rows_per_day": 5,
-      "max_scan_rows": 200,
+      "rows_per_day": 3,
+      "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_bd_refer_trade_daily_stat_di",
         "column": "FTD",
         "time_column": "bizdate",
         "table_description": "BD拉新、交易、返佣、出金日报"
       },
       "freshness": {
-        "data_start": "2026-04-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -102,20 +102,20 @@
         "bd_name"
       ],
       "requires_time_window": true,
-      "rows_per_day": 5,
-      "max_scan_rows": 200,
+      "rows_per_day": 3,
+      "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_bd_refer_trade_daily_stat_di",
         "column": "FTTC",
         "time_column": "bizdate",
         "table_description": "BD拉新、交易、返佣、出金日报"
       },
       "freshness": {
-        "data_start": "2026-04-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -126,20 +126,20 @@
         "bd_name"
       ],
       "requires_time_window": true,
-      "rows_per_day": 5,
-      "max_scan_rows": 200,
+      "rows_per_day": 3,
+      "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_bd_refer_trade_daily_stat_di",
         "column": "commission_u",
         "time_column": "bizdate",
         "table_description": "BD拉新、交易、返佣、出金日报"
       },
       "freshness": {
-        "data_start": "2026-04-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -150,20 +150,20 @@
         "bd_name"
       ],
       "requires_time_window": true,
-      "rows_per_day": 5,
-      "max_scan_rows": 200,
+      "rows_per_day": 3,
+      "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_bd_refer_trade_daily_stat_di",
         "column": "deposit",
         "time_column": "bizdate",
         "table_description": "BD拉新、交易、返佣、出金日报"
       },
       "freshness": {
-        "data_start": "2026-04-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -174,20 +174,20 @@
         "bd_name"
       ],
       "requires_time_window": true,
-      "rows_per_day": 5,
-      "max_scan_rows": 200,
+      "rows_per_day": 3,
+      "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_bd_refer_trade_daily_stat_di",
         "column": "eFTTC",
         "time_column": "bizdate",
         "table_description": "BD拉新、交易、返佣、出金日报"
       },
       "freshness": {
-        "data_start": "2026-04-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -198,20 +198,20 @@
         "bd_name"
       ],
       "requires_time_window": true,
-      "rows_per_day": 5,
-      "max_scan_rows": 200,
+      "rows_per_day": 3,
+      "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_bd_refer_trade_daily_stat_di",
         "column": "net_deposit",
         "time_column": "bizdate",
         "table_description": "BD拉新、交易、返佣、出金日报"
       },
       "freshness": {
-        "data_start": "2026-04-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -222,20 +222,20 @@
         "bd_name"
       ],
       "requires_time_window": true,
-      "rows_per_day": 5,
-      "max_scan_rows": 200,
+      "rows_per_day": 3,
+      "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_bd_refer_trade_daily_stat_di",
         "column": "net_fee_u",
         "time_column": "bizdate",
         "table_description": "BD拉新、交易、返佣、出金日报"
       },
       "freshness": {
-        "data_start": "2026-04-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -246,20 +246,20 @@
         "bd_name"
       ],
       "requires_time_window": true,
-      "rows_per_day": 5,
-      "max_scan_rows": 200,
+      "rows_per_day": 3,
+      "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_bd_refer_trade_daily_stat_di",
         "column": "register_uv",
         "time_column": "bizdate",
         "table_description": "BD拉新、交易、返佣、出金日报"
       },
       "freshness": {
-        "data_start": "2026-04-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -270,20 +270,20 @@
         "bd_name"
       ],
       "requires_time_window": true,
-      "rows_per_day": 5,
-      "max_scan_rows": 200,
+      "rows_per_day": 3,
+      "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_bd_refer_trade_daily_stat_di",
         "column": "risk_commission_u",
         "time_column": "bizdate",
         "table_description": "BD拉新、交易、返佣、出金日报"
       },
       "freshness": {
-        "data_start": "2026-04-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -294,20 +294,20 @@
         "bd_name"
       ],
       "requires_time_window": true,
-      "rows_per_day": 5,
-      "max_scan_rows": 200,
+      "rows_per_day": 3,
+      "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_bd_refer_trade_daily_stat_di",
         "column": "trade_amount_u",
         "time_column": "bizdate",
         "table_description": "BD拉新、交易、返佣、出金日报"
       },
       "freshness": {
-        "data_start": "2026-04-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -318,20 +318,20 @@
         "bd_name"
       ],
       "requires_time_window": true,
-      "rows_per_day": 5,
-      "max_scan_rows": 200,
+      "rows_per_day": 3,
+      "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_bd_refer_trade_daily_stat_di",
         "column": "trade_fee_u",
         "time_column": "bizdate",
         "table_description": "BD拉新、交易、返佣、出金日报"
       },
       "freshness": {
-        "data_start": "2026-04-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -342,20 +342,20 @@
         "bd_name"
       ],
       "requires_time_window": true,
-      "rows_per_day": 5,
-      "max_scan_rows": 200,
+      "rows_per_day": 3,
+      "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_bd_refer_trade_daily_stat_di",
         "column": "withdrawal",
         "time_column": "bizdate",
         "table_description": "BD拉新、交易、返佣、出金日报"
       },
       "freshness": {
-        "data_start": "2026-04-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -367,20 +367,20 @@
         "contract_name"
       ],
       "requires_time_window": true,
-      "rows_per_day": 137,
-      "max_scan_rows": 4200,
+      "rows_per_day": 4,
+      "max_scan_rows": 200,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_contract_order_deal_stat_ha",
         "column": "finish_order_cnt",
         "time_column": "part_hour",
         "table_description": "合约订单统计"
       },
       "freshness": {
-        "data_start": "2026-06-04 08:00:00",
-        "data_end": "2026-06-04 08:00:00",
-        "etl_time": "2026-06-04 09:04:48"
+        "data_start": "2026-08-14 08:00:00",
+        "data_end": "2026-08-27 08:00:00",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -392,20 +392,20 @@
         "contract_name"
       ],
       "requires_time_window": true,
-      "rows_per_day": 137,
-      "max_scan_rows": 4200,
+      "rows_per_day": 4,
+      "max_scan_rows": 200,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_contract_order_deal_stat_ha",
         "column": "history_deal_order_cnt",
         "time_column": "part_hour",
         "table_description": "合约订单统计"
       },
       "freshness": {
-        "data_start": "2026-06-04 08:00:00",
-        "data_end": "2026-06-04 08:00:00",
-        "etl_time": "2026-06-04 09:04:48"
+        "data_start": "2026-08-14 08:00:00",
+        "data_end": "2026-08-27 08:00:00",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -417,20 +417,20 @@
         "contract_name"
       ],
       "requires_time_window": true,
-      "rows_per_day": 137,
-      "max_scan_rows": 4200,
+      "rows_per_day": 4,
+      "max_scan_rows": 200,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_contract_order_deal_stat_ha",
         "column": "order_cnt",
         "time_column": "part_hour",
         "table_description": "合约订单统计"
       },
       "freshness": {
-        "data_start": "2026-06-04 08:00:00",
-        "data_end": "2026-06-04 08:00:00",
-        "etl_time": "2026-06-04 09:04:48"
+        "data_start": "2026-08-14 08:00:00",
+        "data_end": "2026-08-27 08:00:00",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -442,20 +442,20 @@
         "contract_name"
       ],
       "requires_time_window": true,
-      "rows_per_day": 137,
-      "max_scan_rows": 4200,
+      "rows_per_day": 4,
+      "max_scan_rows": 200,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_contract_order_deal_stat_ha",
         "column": "progress_order_cnt",
         "time_column": "part_hour",
         "table_description": "合约订单统计"
       },
       "freshness": {
-        "data_start": "2026-06-04 08:00:00",
-        "data_end": "2026-06-04 08:00:00",
-        "etl_time": "2026-06-04 09:04:48"
+        "data_start": "2026-08-14 08:00:00",
+        "data_end": "2026-08-27 08:00:00",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -467,20 +467,20 @@
         "contract_name"
       ],
       "requires_time_window": true,
-      "rows_per_day": 137,
-      "max_scan_rows": 4200,
+      "rows_per_day": 4,
+      "max_scan_rows": 200,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_contract_order_deal_stat_ha",
         "column": "progress_order_size",
         "time_column": "part_hour",
         "table_description": "合约订单统计"
       },
       "freshness": {
-        "data_start": "2026-06-04 08:00:00",
-        "data_end": "2026-06-04 08:00:00",
-        "etl_time": "2026-06-04 09:04:48"
+        "data_start": "2026-08-14 08:00:00",
+        "data_end": "2026-08-27 08:00:00",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -491,20 +491,20 @@
         "contract_name"
       ],
       "requires_time_window": true,
-      "rows_per_day": 7,
-      "max_scan_rows": 300,
+      "rows_per_day": 4,
+      "max_scan_rows": 200,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_contract_trade_daily_stat_di",
         "column": "dauc",
         "time_column": "bizdate",
         "table_description": "合约交易日报(日 + 合约维度)"
       },
       "freshness": {
-        "data_start": "2025-07-04",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -515,20 +515,20 @@
         "contract_name"
       ],
       "requires_time_window": true,
-      "rows_per_day": 7,
-      "max_scan_rows": 300,
+      "rows_per_day": 4,
+      "max_scan_rows": 200,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_contract_trade_daily_stat_di",
         "column": "fttc",
         "time_column": "bizdate",
         "table_description": "合约交易日报(日 + 合约维度)"
       },
       "freshness": {
-        "data_start": "2025-07-04",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -539,20 +539,20 @@
         "contract_name"
       ],
       "requires_time_window": true,
-      "rows_per_day": 7,
-      "max_scan_rows": 300,
+      "rows_per_day": 4,
+      "max_scan_rows": 200,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_contract_trade_daily_stat_di",
         "column": "trade_amount_u",
         "time_column": "bizdate",
         "table_description": "合约交易日报(日 + 合约维度)"
       },
       "freshness": {
-        "data_start": "2025-07-04",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -563,20 +563,20 @@
         "contract_name"
       ],
       "requires_time_window": true,
-      "rows_per_day": 7,
-      "max_scan_rows": 300,
+      "rows_per_day": 4,
+      "max_scan_rows": 200,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_contract_trade_daily_stat_di",
         "column": "trade_fee_u",
         "time_column": "bizdate",
         "table_description": "合约交易日报(日 + 合约维度)"
       },
       "freshness": {
-        "data_start": "2025-07-04",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -588,11 +588,11 @@
         "contract_name"
       ],
       "requires_time_window": true,
-      "rows_per_day": 126,
-      "max_scan_rows": 3800,
+      "rows_per_day": 4,
+      "max_scan_rows": 200,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_liquidity_contract_daily_kline_price_di",
         "column": "open_price_00",
         "time_column": "bizdate",
@@ -600,8 +600,8 @@
       },
       "freshness": {
         "data_start": "2026-01-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -613,11 +613,11 @@
         "contract_name"
       ],
       "requires_time_window": true,
-      "rows_per_day": 126,
-      "max_scan_rows": 3800,
+      "rows_per_day": 4,
+      "max_scan_rows": 200,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_liquidity_contract_daily_kline_price_di",
         "column": "open_price_dod_rate",
         "time_column": "bizdate",
@@ -625,8 +625,8 @@
       },
       "freshness": {
         "data_start": "2026-01-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -638,11 +638,11 @@
         "contract_name"
       ],
       "requires_time_window": true,
-      "rows_per_day": 126,
-      "max_scan_rows": 3800,
+      "rows_per_day": 4,
+      "max_scan_rows": 200,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_liquidity_contract_daily_kline_price_di",
         "column": "open_price_gap",
         "time_column": "bizdate",
@@ -650,8 +650,8 @@
       },
       "freshness": {
         "data_start": "2026-01-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -663,11 +663,11 @@
         "contract_name"
       ],
       "requires_time_window": true,
-      "rows_per_day": 126,
-      "max_scan_rows": 3800,
+      "rows_per_day": 4,
+      "max_scan_rows": 200,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_liquidity_contract_daily_kline_price_di",
         "column": "open_price_std",
         "time_column": "bizdate",
@@ -675,8 +675,8 @@
       },
       "freshness": {
         "data_start": "2026-01-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -688,11 +688,11 @@
         "contract_name"
       ],
       "requires_time_window": true,
-      "rows_per_day": 126,
-      "max_scan_rows": 3800,
+      "rows_per_day": 4,
+      "max_scan_rows": 200,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_liquidity_contract_daily_kline_price_di",
         "column": "prev_open_price_00",
         "time_column": "bizdate",
@@ -700,8 +700,8 @@
       },
       "freshness": {
         "data_start": "2026-01-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -713,11 +713,11 @@
         "symbol_name"
       ],
       "requires_time_window": true,
-      "rows_per_day": 51,
-      "max_scan_rows": 1600,
+      "rows_per_day": 3,
+      "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_liquidity_spot_daily_kline_price_di",
         "column": "open_price_00",
         "time_column": "bizdate",
@@ -725,8 +725,8 @@
       },
       "freshness": {
         "data_start": "2026-01-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -738,11 +738,11 @@
         "symbol_name"
       ],
       "requires_time_window": true,
-      "rows_per_day": 51,
-      "max_scan_rows": 1600,
+      "rows_per_day": 3,
+      "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_liquidity_spot_daily_kline_price_di",
         "column": "open_price_dod_rate",
         "time_column": "bizdate",
@@ -750,8 +750,8 @@
       },
       "freshness": {
         "data_start": "2026-01-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -763,11 +763,11 @@
         "symbol_name"
       ],
       "requires_time_window": true,
-      "rows_per_day": 51,
-      "max_scan_rows": 1600,
+      "rows_per_day": 3,
+      "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_liquidity_spot_daily_kline_price_di",
         "column": "open_price_gap",
         "time_column": "bizdate",
@@ -775,8 +775,8 @@
       },
       "freshness": {
         "data_start": "2026-01-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -788,11 +788,11 @@
         "symbol_name"
       ],
       "requires_time_window": true,
-      "rows_per_day": 51,
-      "max_scan_rows": 1600,
+      "rows_per_day": 3,
+      "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_liquidity_spot_daily_kline_price_di",
         "column": "open_price_std",
         "time_column": "bizdate",
@@ -800,8 +800,8 @@
       },
       "freshness": {
         "data_start": "2026-01-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -813,11 +813,11 @@
         "symbol_name"
       ],
       "requires_time_window": true,
-      "rows_per_day": 51,
-      "max_scan_rows": 1600,
+      "rows_per_day": 3,
+      "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_liquidity_spot_daily_kline_price_di",
         "column": "prev_open_price_00",
         "time_column": "bizdate",
@@ -825,8 +825,8 @@
       },
       "freshness": {
         "data_start": "2026-01-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -839,7 +839,7 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_overall_daily_stat_di",
         "column": "contract_trade_amt_u",
         "time_column": "bizdate",
@@ -847,8 +847,8 @@
       },
       "freshness": {
         "data_start": "2026-01-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -861,7 +861,7 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_overall_daily_stat_di",
         "column": "contract_trade_fee_u",
         "time_column": "bizdate",
@@ -869,8 +869,8 @@
       },
       "freshness": {
         "data_start": "2026-01-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -883,7 +883,7 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_overall_daily_stat_di",
         "column": "dau",
         "time_column": "bizdate",
@@ -891,8 +891,8 @@
       },
       "freshness": {
         "data_start": "2026-01-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -905,7 +905,7 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_overall_daily_stat_di",
         "column": "dauc",
         "time_column": "bizdate",
@@ -913,8 +913,8 @@
       },
       "freshness": {
         "data_start": "2026-01-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -927,7 +927,7 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_overall_daily_stat_di",
         "column": "dauf",
         "time_column": "bizdate",
@@ -935,8 +935,8 @@
       },
       "freshness": {
         "data_start": "2026-01-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -949,7 +949,7 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_overall_daily_stat_di",
         "column": "daus",
         "time_column": "bizdate",
@@ -957,8 +957,8 @@
       },
       "freshness": {
         "data_start": "2026-01-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -971,7 +971,7 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_overall_daily_stat_di",
         "column": "deposit",
         "time_column": "bizdate",
@@ -979,8 +979,8 @@
       },
       "freshness": {
         "data_start": "2026-01-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -993,7 +993,7 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_overall_daily_stat_di",
         "column": "dnu",
         "time_column": "bizdate",
@@ -1001,8 +1001,8 @@
       },
       "freshness": {
         "data_start": "2026-01-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1015,7 +1015,7 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_overall_daily_stat_di",
         "column": "eFTTC",
         "time_column": "bizdate",
@@ -1023,8 +1023,8 @@
       },
       "freshness": {
         "data_start": "2026-01-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1037,7 +1037,7 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_overall_daily_stat_di",
         "column": "forex_trade_fee_u",
         "time_column": "bizdate",
@@ -1045,8 +1045,8 @@
       },
       "freshness": {
         "data_start": "2026-01-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1059,7 +1059,7 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_overall_daily_stat_di",
         "column": "forex_trade_volume",
         "time_column": "bizdate",
@@ -1067,8 +1067,8 @@
       },
       "freshness": {
         "data_start": "2026-01-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1081,7 +1081,7 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_overall_daily_stat_di",
         "column": "ftd",
         "time_column": "bizdate",
@@ -1089,8 +1089,8 @@
       },
       "freshness": {
         "data_start": "2026-01-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1103,7 +1103,7 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_overall_daily_stat_di",
         "column": "ftt",
         "time_column": "bizdate",
@@ -1111,8 +1111,8 @@
       },
       "freshness": {
         "data_start": "2026-01-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1125,7 +1125,7 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_overall_daily_stat_di",
         "column": "fttc",
         "time_column": "bizdate",
@@ -1133,8 +1133,8 @@
       },
       "freshness": {
         "data_start": "2026-01-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1147,7 +1147,7 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_overall_daily_stat_di",
         "column": "fttf",
         "time_column": "bizdate",
@@ -1155,8 +1155,8 @@
       },
       "freshness": {
         "data_start": "2026-01-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1169,7 +1169,7 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_overall_daily_stat_di",
         "column": "ftts",
         "time_column": "bizdate",
@@ -1177,8 +1177,8 @@
       },
       "freshness": {
         "data_start": "2026-01-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1191,7 +1191,7 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_overall_daily_stat_di",
         "column": "net_deposit",
         "time_column": "bizdate",
@@ -1199,8 +1199,8 @@
       },
       "freshness": {
         "data_start": "2026-01-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1213,7 +1213,7 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_overall_daily_stat_di",
         "column": "spot_trade_amt_u",
         "time_column": "bizdate",
@@ -1221,8 +1221,8 @@
       },
       "freshness": {
         "data_start": "2026-01-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1235,7 +1235,7 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_overall_daily_stat_di",
         "column": "spot_trade_fee_u",
         "time_column": "bizdate",
@@ -1243,8 +1243,8 @@
       },
       "freshness": {
         "data_start": "2026-01-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1257,7 +1257,7 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_overall_daily_stat_di",
         "column": "withdrawal",
         "time_column": "bizdate",
@@ -1265,8 +1265,8 @@
       },
       "freshness": {
         "data_start": "2026-01-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1279,16 +1279,16 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_polymarket_push_daily_report_di",
         "column": "trade_amount",
         "time_column": "bizdate",
         "table_description": "预测市场推送日报"
       },
       "freshness": {
-        "data_start": "2026-06-12",
-        "data_end": "2026-07-14",
-        "etl_time": "2026-07-14 19:40:00"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1301,16 +1301,16 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_polymarket_push_daily_report_di",
         "column": "trade_fee",
         "time_column": "bizdate",
         "table_description": "预测市场推送日报"
       },
       "freshness": {
-        "data_start": "2026-06-12",
-        "data_end": "2026-07-14",
-        "etl_time": "2026-07-14 19:40:00"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1323,16 +1323,16 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_polymarket_push_daily_report_di",
         "column": "trade_users",
         "time_column": "bizdate",
         "table_description": "预测市场推送日报"
       },
       "freshness": {
-        "data_start": "2026-06-12",
-        "data_end": "2026-07-14",
-        "etl_time": "2026-07-14 19:40:00"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1345,16 +1345,16 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_polymarket_push_monthly_report_di",
         "column": "trade_amount",
         "time_column": "bizdate",
         "table_description": "预测市场推送周报"
       },
       "freshness": {
-        "data_start": "2026-06-01",
-        "data_end": "2026-06-01",
-        "etl_time": "2026-06-30 19:20:00"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1367,16 +1367,16 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_polymarket_push_monthly_report_di",
         "column": "trade_fee",
         "time_column": "bizdate",
         "table_description": "预测市场推送周报"
       },
       "freshness": {
-        "data_start": "2026-06-01",
-        "data_end": "2026-06-01",
-        "etl_time": "2026-06-30 19:20:00"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1389,16 +1389,16 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_polymarket_push_monthly_report_di",
         "column": "trade_users",
         "time_column": "bizdate",
         "table_description": "预测市场推送周报"
       },
       "freshness": {
-        "data_start": "2026-06-01",
-        "data_end": "2026-06-01",
-        "etl_time": "2026-06-30 19:20:00"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1411,16 +1411,16 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_polymarket_push_weekly_report_di",
         "column": "trade_amount",
         "time_column": "bizdate",
         "table_description": "预测市场推送周报"
       },
       "freshness": {
-        "data_start": "2026-06-15",
-        "data_end": "2026-07-06",
-        "etl_time": "2026-07-12 19:20:00"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1433,16 +1433,16 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_polymarket_push_weekly_report_di",
         "column": "trade_fee",
         "time_column": "bizdate",
         "table_description": "预测市场推送周报"
       },
       "freshness": {
-        "data_start": "2026-06-15",
-        "data_end": "2026-07-06",
-        "etl_time": "2026-07-12 19:20:00"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1455,16 +1455,16 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_polymarket_push_weekly_report_di",
         "column": "trade_users",
         "time_column": "bizdate",
         "table_description": "预测市场推送周报"
       },
       "freshness": {
-        "data_start": "2026-06-15",
-        "data_end": "2026-07-06",
-        "etl_time": "2026-07-12 19:20:00"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1476,20 +1476,20 @@
         "symbol_name"
       ],
       "requires_time_window": true,
-      "rows_per_day": 34,
-      "max_scan_rows": 1100,
+      "rows_per_day": 3,
+      "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_spot_order_deal_stat_ha",
         "column": "finish_order_cnt",
         "time_column": "part_hour",
         "table_description": "现货订单统计"
       },
       "freshness": {
-        "data_start": "2026-06-04 08:00:00",
-        "data_end": "2026-06-04 08:00:00",
-        "etl_time": "2026-06-04 09:04:48"
+        "data_start": "2026-08-14 08:00:00",
+        "data_end": "2026-08-27 08:00:00",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1501,20 +1501,20 @@
         "symbol_name"
       ],
       "requires_time_window": true,
-      "rows_per_day": 34,
-      "max_scan_rows": 1100,
+      "rows_per_day": 3,
+      "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_spot_order_deal_stat_ha",
         "column": "history_deal_order_cnt",
         "time_column": "part_hour",
         "table_description": "现货订单统计"
       },
       "freshness": {
-        "data_start": "2026-06-04 08:00:00",
-        "data_end": "2026-06-04 08:00:00",
-        "etl_time": "2026-06-04 09:04:48"
+        "data_start": "2026-08-14 08:00:00",
+        "data_end": "2026-08-27 08:00:00",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1526,20 +1526,20 @@
         "symbol_name"
       ],
       "requires_time_window": true,
-      "rows_per_day": 34,
-      "max_scan_rows": 1100,
+      "rows_per_day": 3,
+      "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_spot_order_deal_stat_ha",
         "column": "order_cnt",
         "time_column": "part_hour",
         "table_description": "现货订单统计"
       },
       "freshness": {
-        "data_start": "2026-06-04 08:00:00",
-        "data_end": "2026-06-04 08:00:00",
-        "etl_time": "2026-06-04 09:04:48"
+        "data_start": "2026-08-14 08:00:00",
+        "data_end": "2026-08-27 08:00:00",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1551,20 +1551,20 @@
         "symbol_name"
       ],
       "requires_time_window": true,
-      "rows_per_day": 34,
-      "max_scan_rows": 1100,
+      "rows_per_day": 3,
+      "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_spot_order_deal_stat_ha",
         "column": "progress_order_cnt",
         "time_column": "part_hour",
         "table_description": "现货订单统计"
       },
       "freshness": {
-        "data_start": "2026-06-04 08:00:00",
-        "data_end": "2026-06-04 08:00:00",
-        "etl_time": "2026-06-04 09:04:48"
+        "data_start": "2026-08-14 08:00:00",
+        "data_end": "2026-08-27 08:00:00",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1576,20 +1576,20 @@
         "symbol_name"
       ],
       "requires_time_window": true,
-      "rows_per_day": 34,
-      "max_scan_rows": 1100,
+      "rows_per_day": 3,
+      "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_spot_order_deal_stat_ha",
         "column": "progress_order_size",
         "time_column": "part_hour",
         "table_description": "现货订单统计"
       },
       "freshness": {
-        "data_start": "2026-06-04 08:00:00",
-        "data_end": "2026-06-04 08:00:00",
-        "etl_time": "2026-06-04 09:04:48"
+        "data_start": "2026-08-14 08:00:00",
+        "data_end": "2026-08-27 08:00:00",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1601,20 +1601,20 @@
         "trade_type"
       ],
       "requires_time_window": true,
-      "rows_per_day": 9,
-      "max_scan_rows": 300,
+      "rows_per_day": 15,
+      "max_scan_rows": 500,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_trade_fee_daily_report_di",
         "column": "trade_fee",
         "time_column": "bizdate",
         "table_description": "手续费收取日报"
       },
       "freshness": {
-        "data_start": "2026-06-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1626,20 +1626,20 @@
         "trade_type"
       ],
       "requires_time_window": true,
-      "rows_per_day": 9,
-      "max_scan_rows": 300,
+      "rows_per_day": 15,
+      "max_scan_rows": 500,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_trade_fee_daily_report_di",
         "column": "trade_fee_u",
         "time_column": "bizdate",
         "table_description": "手续费收取日报"
       },
       "freshness": {
-        "data_start": "2026-06-01",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1652,16 +1652,16 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_world_cup_activity_user_trade_di",
         "column": "trade_amount_contract",
         "time_column": "bizdate",
         "table_description": "世界杯活动用户交易情况"
       },
       "freshness": {
-        "data_start": "2026-06-12",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1674,16 +1674,16 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_world_cup_activity_user_trade_di",
         "column": "trade_amount_polymarket",
         "time_column": "bizdate",
         "table_description": "世界杯活动用户交易情况"
       },
       "freshness": {
-        "data_start": "2026-06-12",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1696,16 +1696,16 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_world_cup_activity_user_trade_di",
         "column": "trade_amount_spot",
         "time_column": "bizdate",
         "table_description": "世界杯活动用户交易情况"
       },
       "freshness": {
-        "data_start": "2026-06-12",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1718,16 +1718,16 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_world_cup_activity_user_trade_di",
         "column": "trade_users_contract",
         "time_column": "bizdate",
         "table_description": "世界杯活动用户交易情况"
       },
       "freshness": {
-        "data_start": "2026-06-12",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1740,16 +1740,16 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_world_cup_activity_user_trade_di",
         "column": "trade_users_mt5",
         "time_column": "bizdate",
         "table_description": "世界杯活动用户交易情况"
       },
       "freshness": {
-        "data_start": "2026-06-12",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1762,16 +1762,16 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_world_cup_activity_user_trade_di",
         "column": "trade_users_polymarket",
         "time_column": "bizdate",
         "table_description": "世界杯活动用户交易情况"
       },
       "freshness": {
-        "data_start": "2026-06-12",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1784,16 +1784,16 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_world_cup_activity_user_trade_di",
         "column": "trade_users_spot",
         "time_column": "bizdate",
         "table_description": "世界杯活动用户交易情况"
       },
       "freshness": {
-        "data_start": "2026-06-12",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1806,16 +1806,16 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_world_cup_activity_user_trade_di",
         "column": "trade_users_tradfi",
         "time_column": "bizdate",
         "table_description": "世界杯活动用户交易情况"
       },
       "freshness": {
-        "data_start": "2026-06-12",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1828,16 +1828,16 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_world_cup_activity_user_trade_di",
         "column": "trade_volume_mt5",
         "time_column": "bizdate",
         "table_description": "世界杯活动用户交易情况"
       },
       "freshness": {
-        "data_start": "2026-06-12",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     },
     {
@@ -1850,16 +1850,16 @@
       "max_scan_rows": 100,
       "source": {
         "catalog": "default_catalog",
-        "schema": "ads",
+        "schema": "bi_agent_dev",
         "table": "ads_world_cup_activity_user_trade_di",
         "column": "trade_volume_tradfi",
         "time_column": "bizdate",
         "table_description": "世界杯活动用户交易情况"
       },
       "freshness": {
-        "data_start": "2026-06-12",
-        "data_end": "2026-07-16",
-        "etl_time": "2026-07-16 19:40:02"
+        "data_start": "2026-01-01",
+        "data_end": "2026-08-27",
+        "etl_time": "2026-08-27 19:40:02"
       }
     }
   ],
@@ -1868,62 +1868,62 @@
       {
         "name": "bd_name",
         "description": "BD名称",
-        "cardinality": 5
+        "cardinality": 3
       }
     ],
     "ads_contract_order_deal_stat_ha": [
       {
         "name": "contract_id",
         "description": "合约ID",
-        "cardinality": 137
+        "cardinality": 39
       },
       {
         "name": "contract_name",
         "description": "合约名称",
-        "cardinality": 137
+        "cardinality": 4
       }
     ],
     "ads_contract_trade_daily_stat_di": [
       {
         "name": "contract_name",
         "description": "合约名称",
-        "cardinality": 151
+        "cardinality": 4
       }
     ],
     "ads_liquidity_contract_daily_kline_price_di": [
       {
         "name": "contract_id",
         "description": "合约ID",
-        "cardinality": 193
+        "cardinality": 90
       },
       {
         "name": "contract_name",
         "description": "合约名称",
-        "cardinality": 193
+        "cardinality": 4
       }
     ],
     "ads_liquidity_spot_daily_kline_price_di": [
       {
         "name": "symbol_id",
         "description": "现货ID",
-        "cardinality": 54
+        "cardinality": 88
       },
       {
         "name": "symbol_name",
         "description": "现货名称",
-        "cardinality": 54
+        "cardinality": 3
       }
     ],
     "ads_spot_order_deal_stat_ha": [
       {
         "name": "symbol_id",
         "description": "现货币对ID",
-        "cardinality": 34
+        "cardinality": 32
       },
       {
         "name": "symbol_name",
         "description": "现货币对",
-        "cardinality": 34
+        "cardinality": 3
       }
     ],
     "ads_trade_fee_daily_report_di": [
@@ -1935,43 +1935,12 @@
       {
         "name": "fee_coin",
         "description": "收取的手续费币种",
-        "cardinality": 34
+        "cardinality": 3
       }
     ]
   },
   "build_notes": [
-    "ads 库共 44 张表/视图",
-    "排除 ads_benefit_distribution_detail_view：个体级（uid、account_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
-    "排除 ads_benefit_distribution_transaction_daily_stat_view：5/5 列没有注释，口径不明（bizdate、distribution_amt、distribution_uv、transaction_amt）",
-    "排除 ads_benefit_distribution_transaction_stat_view：5/5 列没有注释，口径不明（bizdate、distribution_amt、distribution_uv、transaction_amt）",
-    "排除 ads_bifu_user_mt5_commission_deal_di：找不到时间列，做不了时间窗强制",
-    "排除 ads_bifu_user_mt5_commission_detail_di：个体级（user_id、invite_uid）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
-    "排除 ads_channel_plan_A_activity_Samy_0513_data_view：个体级（user_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
-    "排除 ads_channel_plan_A_activity_karl_0513_data_view：个体级（user_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
-    "排除 ads_channel_plan_A_activity_karl_0514_data_view：个体级（user_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
-    "排除 ads_channel_plan_B_activity_stat_view：个体级（top_uid、user_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
-    "排除 ads_channel_plan_C_activity_stat_view：个体级（top_uid、user_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
-    "排除 ads_channel_plan_D_activity_stat_view：个体级（top_uid、user_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
-    "排除 ads_contract_info_tmp_di：找不到时间列，做不了时间窗强制",
-    "排除 ads_contract_user_net_profit_stat_hi：个体级（user_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
-    "排除 ads_forex_mt5_close_deal_detail_hi：个体级（login_id、user_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
-    "排除 ads_ib_user_commission_rate_da：个体级（top_uid、invite_uid、user_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
-    "排除 ads_liquidity_contract_daily_trade_di：个体级（user_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
-    "排除 ads_liquidity_contract_kline_price_view：6/6 列没有注释，口径不明（bizdate、contract_id、contract_name、open_price_dod）",
-    "排除 ads_liquidity_contract_trade_view：个体级（user_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
-    "排除 ads_liquidity_spot_daily_trade_di：个体级（user_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
-    "排除 ads_liquidity_spot_kline_price_view：6/6 列没有注释，口径不明（bizdate、symbol_id、symbol_name、open_price_dod）",
-    "排除 ads_liquidity_spot_trade_view：个体级（user_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
-    "排除 ads_polymarket_user_order_detail_view：个体级（user_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
-    "排除 ads_private_domain_network_user_tmp：个体级（user_id、login_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
-    "排除 ads_private_domain_trade_accumulative_stat_di：个体级（top_uid）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
-    "排除 ads_private_domain_trade_daily_stat_di：个体级（top_uid）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
-    "排除 ads_register_trade_deposit_daily_view：15/15 列没有注释，口径不明（bizdate、dnu、dau、daus）",
-    "排除 ads_risk_same_source_user_detail_di：个体级（user_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
-    "排除 ads_risk_same_users_ha：个体级（user_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
-    "排除 ads_risk_user_shared_identifier_detail_view：个体级（user_id）。StarRocks 无行级安全，个体数据进注册表就没人管得住谁看哪些行",
-    "排除 ads_sopt_trade_amt_fee_daily_token_stat_view：6/6 列没有注释，口径不明（symbol_name、bizdate、ftts、trade_fee_u）",
-    "排除 ads_sopt_trade_amt_fee_stat_view：找不到时间列，做不了时间窗强制",
+    "bi_agent_dev 库共 13 张表/视图",
     "通过筛选 13 张，逐张探活",
     "同名列 dauc 出现在 2 张表：ads_contract_trade_daily_stat_di、ads_overall_daily_stat_di —— 指标名已按表限定，不会混；但值得确认这几处是不是同一个口径",
     "同名列 deposit 出现在 2 张表：ads_bd_refer_trade_daily_stat_di、ads_overall_daily_stat_di —— 指标名已按表限定，不会混；但值得确认这几处是不是同一个口径",
@@ -1995,5 +1964,5 @@
     "同名列 trade_users 出现在 3 张表：ads_polymarket_push_daily_report_di、ads_polymarket_push_monthly_report_di、ads_polymarket_push_weekly_report_di —— 指标名已按表限定，不会混；但值得确认这几处是不是同一个口径",
     "同名列 withdrawal 出现在 2 张表：ads_bd_refer_trade_daily_stat_di、ads_overall_daily_stat_di —— 指标名已按表限定，不会混；但值得确认这几处是不是同一个口径"
   ],
-  "data_notice": null
+  "data_notice": "⚠️ 本次数据来自 `bi_agent_dev`，**不是生产 ads 层**。这是开发用的复刻库，表结构和口径注释复制自生产，但**数值全部是造出来的**（维度值带「示例」字样）。回答里必须声明这一点，绝对不可用于任何业务结论。"
 }

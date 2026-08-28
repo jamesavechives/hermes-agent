@@ -283,8 +283,12 @@ def _meta(backend: str, fx: dict, result: dict) -> dict:
     meta = {
         "backend": backend,
         "scanned_rows": result.get("scanned_rows", 0),
-        "source": "StarRocks ads 层（数仓应用层）",
+        "source": f"StarRocks `{result.get('schema') or '?'}` 库",
     }
+    # 数据性质放在最前面（note 这个键名和桩数据那条一致，模型对它的反应实测有效）。
+    # 挂在数据上而不是后端上：换后端不该让免责声明静默消失。
+    if result.get("data_notice"):
+        meta["note"] = result["data_notice"]
     for k in ("aggregation", "aggregation_caveat", "freshness", "metric_description"):
         if result.get(k) is not None:
             meta[k] = result[k]
