@@ -189,12 +189,22 @@ class App:
                 entry, platform_id = item, key
                 break
         if entry is None:
+            # **没登记的人来过，这件事本身要留痕。** 两个理由：
+            #
+            # 1. 运营上：新人第一次打开页面会被拒，我们需要知道他的身份标识长
+            #    什么样才能把他加进名单。不留痕的话只能等他截图报错发过来 ——
+            #    那既慢又容易漏（很多人被拒一次就不再试了）。
+            # 2. 审计上：「谁试过但没被授权」是最该被记下来的一类事件之一。
+            #    它可能是新同事，也可能不是。
+            #
+            # 这条走门禁自己的落盘函数，和其它审计记录同构，能一起对账。
+            self._audit_unknown(subject, ident)
             return {"ok": False, "stage": "身份",
                     "message": f"「{subject}」不在主体名单里。\n\n"
                                f"名单由业务方维护 —— 要加人得先登记，"
                                f"助手不认没登记的身份。\n"
-                               f"（如果你是通过 Teleport 登录的，"
-                               f"需要把你的 Teleport 用户名加进名单的 aliases 里。）"}
+                               f"这次尝试已记录，管理员能看到你的身份标识，"
+                               f"直接找他加进名单即可（不用截图）。"}
 
         args: Dict[str, Any] = {
             "metric": body.get("metric"),
@@ -227,6 +237,30 @@ class App:
             clear_session_vars(tokens)
 
         return {"ok": not out.get("error"), "stage": "执行", "result": out, "args": args}
+
+    def _audit_unknown(self, subject: str, ident: Dict[str, Any]) -> None:
+        """记一条「没登记的人来过」。写不进去不影响返回给用户的结果。"""
+        import time
+        try:
+            self.gate._write_audit_line({
+                "event": "bi_gate_verdict",
+                "profile": self.profile.name,
+                "ts": int(time.time()),
+                "source": "bi-gate-webui",
+                "gate_result": "rejected_unknown_principal",
+                "tool": "query_metric",
+                # 身份标识原样记下 —— 这正是要捞出来的东西。
+                "principal": {
+                    "subject": None,
+                    "claimed": subject,
+                    "asserted_by": ident.get("asserted_by", "unknown"),
+                    "verified": bool(ident.get("verified")),
+                },
+                "detail": {"note": "有人打开了体验页但不在主体名单里。"
+                                   "claimed 就是他的身份标识，登记时用它。"},
+            })
+        except Exception:      # noqa: BLE001 —— 留痕失败不该让页面报错
+            pass
 
     # ── 页面数据 ────────────────────────────────────────────────────────
     def catalog(self) -> Dict[str, Any]:

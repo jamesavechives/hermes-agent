@@ -450,3 +450,48 @@ def test_malformed_aliases_drops_the_whole_entry(ident, monkeypatch, tmp_path):
     finally:
         clear_session_vars(tokens)
     assert not v.ok
+
+
+def test_webui_records_people_who_were_not_on_the_list(tmp_path, monkeypatch):
+    """没登记的人打开过体验页 —— 这件事要留痕。
+
+    两个理由：
+
+    1. 运营上：新同事第一次打开会被拒，我们需要知道他的身份标识长什么样才能
+       把他加进名单。不留痕就只能等他截图报错发过来 —— 既慢又容易漏
+       （很多人被拒一次就不再试了）。
+    2. 审计上：「谁试过但没被授权」本来就是最该记的一类事件。
+
+    2026-08-28 加体验页时漏了这条：拒绝分支直接 return，一个字都没写。
+    """
+    import importlib.util
+    webui_path = PLUGIN_DIR / "webui.py"
+    spec = importlib.util.spec_from_file_location("bi_gate_webui_audit", webui_path)
+    webui = importlib.util.module_from_spec(spec)
+    sys.modules["bi_gate_webui_audit"] = webui
+    spec.loader.exec_module(webui)
+
+    profile = tmp_path / "prof"
+    profile.mkdir()
+    audit = tmp_path / "audit.jsonl"
+    registry = tmp_path / "reg.json"
+    registry.write_text(json.dumps({
+        "data_notice": "造出来的数据",
+        "metrics": [{"name": "m", "dimensions": [], "source": {}}],
+    }, ensure_ascii=False), encoding="utf-8")
+    principals = _map(tmp_path, {"ou_known": {"subject": "s", "display": "在名单里的人"}})
+    (profile / ".env").write_text(
+        f"BI_GATE_REGISTRY={registry}\nBI_GATE_PRINCIPAL_MAP={principals}\n"
+        f"BI_AUDIT_LOG={audit}\nBI_GATE_TOOLS=query_metric\n", encoding="utf-8")
+
+    app = webui.App(profile, mode="self-declared")
+    out = app.run_query({"principal": "某个还没登记的人", "metric": "m",
+                         "start": "2026-08-01", "end": "2026-08-02"})
+    assert not out["ok"] and out["stage"] == "身份"
+
+    records = [json.loads(l) for l in audit.read_text(encoding="utf-8").splitlines() if l.strip()]
+    hit = [r for r in records if r.get("gate_result") == "rejected_unknown_principal"]
+    assert hit, f"没登记的人来过却没留痕：{records}"
+    assert hit[-1]["principal"]["claimed"] == "某个还没登记的人", (
+        "留痕里没有身份标识 —— 那就还是得等人截图，等于白记")
+    assert hit[-1]["source"] == "bi-gate-webui"
