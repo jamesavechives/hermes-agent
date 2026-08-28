@@ -64,7 +64,13 @@ def _make_profile(root: Path, name: str, *, metric: str, action_max: str,
         "BI_GATE_TOOLS": "query_metric",
         "BI_GATE_SESSION_SCAN_MAX": str(session_max),
         "BI_AUDIT_LOG": str(audit),
+        "BI_GATE_PRINCIPAL_MAP": str(d / "principals.json"),
     }), encoding="utf-8")
+    # 主体映射。两个 profile 各自一份 —— 隔离测的就是"人格之间互不串"，
+    # 共用一张表会把这件事本身测没了。
+    (d / "principals.json").write_text(json.dumps({
+        "principals": {"ou_iso_test": {"subject": f"subject_of_{d.name}", "display": "隔离测试"}}
+    }, ensure_ascii=False), encoding="utf-8")
     return d
 
 
@@ -79,6 +85,13 @@ PROBE = textwrap.dedent('''
         "g", PD / "__init__.py", submodule_search_locations=[str(PD)])
     g = importlib.util.module_from_spec(spec); sys.modules["g"] = g
     spec.loader.exec_module(g); g.reload_registry()
+
+    # 绑一个会话身份。子进程不继承父进程的 ContextVar（这正是那套设计的用意），
+    # 所以这里得像真实网关那样自己绑一次 —— 而不是往环境变量里塞一个身份。
+    # 环境变量那条路是门禁**特意不走**的（identity.py 模块说明）。
+    from gateway.session_context import set_session_vars
+    set_session_vars(platform="feishu", user_id="ou_iso_test",
+                     user_name="隔离测试", session_id="iso-test")
 
     W = {"start": "2026-08-01", "end": "2026-08-05", "timezone": "UTC+8"}
     out = {"profile": g._profile_name(), "metrics": g._registry_now().names}

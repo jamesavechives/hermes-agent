@@ -44,6 +44,10 @@ TOOL_NAME = "query_metric"
 #: 一方没装的时候另一方不该崩。代价是这个常量在两处，改名要同时改；
 #: 有一条测试守住它们一致。
 GATE_CALL_ID_ARG = "_bi_gate_call_id"
+
+#: 门禁放行时塞进来的主体（以谁的名义查）。和 GATE_CALL_ID_ARG 一样，
+#: **故意在两个插件里各写一份** —— 两边可以分别部署，靠测试守住相等。
+GATE_PRINCIPAL_ARG = "_bi_principal"
 TOOLSET = "bi"
 
 #: 审计里标记执行方，和门禁的 GATE_SOURCE 对应，便于对账。
@@ -255,6 +259,30 @@ def handle_query_metric(args: Dict[str, Any], **_kwargs: Any) -> str:
         _audit({"event": "rejected_by_tool", "reason": "metric_missing"})
         return json.dumps({"error": "metric 是必填的"}, ensure_ascii=False)
 
+    # ── 没有主体不执行 ──────────────────────────────────────────────
+    # 这一条和 call_id 的处理**故意不同**。call_id 缺了照样执行、记成 None ——
+    # 因为它是用来发现"这次调用绕过了门禁"的探针，抹平了就发现不了。
+    # 主体缺了必须拒：这一侧是真正要去连数据层的，接上 StarRocks 之后一条
+    # 不知道以谁的名义发出的查询，就是用共享账号查全量。那正是整件事要防的。
+    #
+    # 拒了同样留痕（记 principal=None），所以"绕过门禁"依旧看得见 ——
+    # 既拒绝执行，又不丢失这次异常。
+    principal = args.get(GATE_PRINCIPAL_ARG)
+    if not isinstance(principal, dict) or not principal.get("subject"):
+        _audit({
+            "event": "rejected_by_tool",
+            "reason": "principal_missing",
+            "profile": Path(os.environ.get("HERMES_HOME", "")).name,
+            "ts": int(time.time()),
+            "call_id": args.get(GATE_CALL_ID_ARG),
+            "metric": metric,
+            "principal": None,
+        })
+        return json.dumps({
+            "error": "这次查询没有携带发起人身份，不能执行。"
+                     "数据按人授权，不知道是谁就查不了。",
+        }, ensure_ascii=False)
+
     result = _backend_stub(metric, dimensions, window)
     fx = _fixtures()
 
@@ -272,6 +300,8 @@ def handle_query_metric(args: Dict[str, Any], **_kwargs: Any) -> str:
         # 所以记成 None 而不是自己生成一个，别把异常抹平成正常。
         "ts": int(time.time()),
         "call_id": args.get(GATE_CALL_ID_ARG),
+        # 以谁的名义查。审计里记全量（含 display），传给后端时只用 subject。
+        "principal": principal,
         "tool": TOOL_NAME,
         "metric": metric,
         "dimensions": sorted(dimensions) if dimensions else [],

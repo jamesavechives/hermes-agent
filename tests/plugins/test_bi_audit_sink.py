@@ -22,6 +22,19 @@ import pytest
 PLUGINS = Path(__file__).resolve().parents[2] / "plugins"
 
 
+def _gated(args: dict) -> dict:
+    """补上门禁放行时注入的元数据（主体 + 配对键）。
+
+    这些测试直接调 ``handle_query_metric``，模拟的是"门禁已放行"那一刻。
+    真实路径上主体由门禁塞进 args；不补的话，bi-query 会因为没有主体而拒绝执行，
+    测的就不是落盘行为了。无主体拒绝那条规则由 test_bi_gate_identity.py 守着。
+    """
+    out = dict(args)
+    out.setdefault("_bi_principal", {"subject": "bi_test_principal", "display": "测试主体",
+                                     "origin": "human", "verified": False})
+    out.setdefault("_bi_gate_call_id", "test_call_id")
+    return out
+
 def _load(dirname: str, modname: str):
     d = PLUGINS / dirname
     spec = importlib.util.spec_from_file_location(
@@ -87,9 +100,9 @@ def test_no_path_is_reported_not_silent(mod_name, request, monkeypatch):
 def test_query_execution_lands_on_disk(query, tmp_path, monkeypatch):
     target = tmp_path / "audit.jsonl"
     monkeypatch.setenv("BI_AUDIT_LOG", str(target))
-    query.handle_query_metric(
+    query.handle_query_metric(_gated(
         {"metric": "daily_active_users", "dimensions": ["market"], "time_window": WINDOW}
-    )
+    ))
     records = _lines(target)
     assert len(records) == 1
     assert records[0]["source"] == "bi-query"
@@ -101,14 +114,14 @@ def test_appends_not_overwrites(query, tmp_path, monkeypatch):
     target = tmp_path / "audit.jsonl"
     monkeypatch.setenv("BI_AUDIT_LOG", str(target))
     for _ in range(3):
-        query.handle_query_metric({"metric": "daily_active_users", "time_window": WINDOW})
+        query.handle_query_metric(_gated({"metric": "daily_active_users", "time_window": WINDOW}))
     assert len(_lines(target)) == 3, "每次调用都要留一条，不能互相覆盖"
 
 
 def test_parent_dir_is_created(query, tmp_path, monkeypatch):
     target = tmp_path / "nested" / "deeper" / "audit.jsonl"
     monkeypatch.setenv("BI_AUDIT_LOG", str(target))
-    query.handle_query_metric({"metric": "daily_active_users", "time_window": WINDOW})
+    query.handle_query_metric(_gated({"metric": "daily_active_users", "time_window": WINDOW}))
     assert target.exists()
 
 
@@ -116,9 +129,9 @@ def test_one_json_object_per_line(query, tmp_path, monkeypatch):
     """一行一条，不能跨行 —— 否则 grep / 流式解析全废。"""
     target = tmp_path / "audit.jsonl"
     monkeypatch.setenv("BI_AUDIT_LOG", str(target))
-    query.handle_query_metric(
+    query.handle_query_metric(_gated(
         {"metric": "spot_trade_volume", "dimensions": ["symbol", "market"], "time_window": WINDOW}
-    )
+    ))
     raw = target.read_text(encoding="utf-8")
     assert raw.endswith("\n")
     assert len([l for l in raw.splitlines() if l.strip()]) == 1
@@ -136,8 +149,8 @@ def test_unwritable_path_does_not_break_the_call(query, tmp_path, monkeypatch):
     blocked = tmp_path / "afile"
     blocked.write_text("我是文件不是目录", encoding="utf-8")
     monkeypatch.setenv("BI_AUDIT_LOG", str(blocked / "audit.jsonl"))
-    out = json.loads(query.handle_query_metric({"metric": "daily_active_users",
-                                               "time_window": WINDOW}))
+    out = json.loads(query.handle_query_metric(_gated({"metric": "daily_active_users",
+                                               "time_window": WINDOW})))
     assert out["rows"], "审计失败不应该让查询失败"
 
 
@@ -157,7 +170,7 @@ def test_both_sides_share_the_sink_and_are_distinguishable(gate, query, tmp_path
 
     gate._write_audit_line({"event": "bi_gate_verdict", "source": "bi-gate",
                             "tool": "query_metric", "gate_result": "allow"})
-    query.handle_query_metric({"metric": "daily_active_users", "time_window": WINDOW})
+    query.handle_query_metric(_gated({"metric": "daily_active_users", "time_window": WINDOW}))
 
     records = _lines(target)
     assert len(records) == 2
@@ -175,7 +188,7 @@ def test_reconcile_spots_execution_without_verdict(gate, query, tmp_path, monkey
     monkeypatch.setenv("BI_AUDIT_LOG", str(target))
 
     # 只有工具执行，没有门禁判定 —— 模拟门禁没启用的情形
-    query.handle_query_metric({"metric": "daily_active_users", "time_window": WINDOW})
+    query.handle_query_metric(_gated({"metric": "daily_active_users", "time_window": WINDOW}))
 
     records = _lines(target)
     verdicts = [r for r in records if r["source"] == "bi-gate"]

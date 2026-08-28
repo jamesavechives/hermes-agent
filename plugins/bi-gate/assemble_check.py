@@ -738,6 +738,72 @@ def check_declared_tools_are_reachable(decl: Dict[str, Any]) -> List[Result]:
     return out
 
 
+def check_identity_is_configured(decl: Dict[str, Any]) -> List[Result]:
+    """⑨ 身份透传配没配全。
+
+    这一层的价值全在「没身份就拒」，而它靠两个环境变量：主体映射表和允许的
+    发起来源。任何一个没配，运行时的表现都是**一律拒绝**（方向对，但业务全停），
+    而且不看审计看不出是为什么。所以在装配期就说清楚。
+
+    这里检查的是「配了没有」，不是「安不安全」。门禁拿到的身份是一个**断言** ——
+    数据层必须自己独立验证。在数据层验证之前，这一层不是安全边界。这句话在
+    identity.py 和设计方案里各写了一遍，这里是第三遍，因为它最容易在
+    「已经做了身份透传」这句话里被丢掉。
+    """
+    out: List[Result] = []
+    env = decl["env"]
+
+    map_path = env.get("BI_GATE_PRINCIPAL_MAP", "").strip()
+    if not map_path:
+        out.append(Result("主体映射表", False,
+                          "BI_GATE_PRINCIPAL_MAP 没配 —— 运行时所有查询都会被拒"))
+    else:
+        data, err = _load_json(map_path)
+        if data is None:
+            out.append(Result("主体映射表", False, f"{map_path} 读不了或不是 JSON（{err}）"))
+        elif not isinstance(data.get("principals"), dict):
+            out.append(Result("主体映射表", False, f"{map_path} 里没有 principals 字典"))
+        else:
+            people = data["principals"]
+            bad = [k for k, v in people.items()
+                   if not isinstance(v, dict) or not v.get("subject")]
+            if bad:
+                out.append(Result("主体映射表", False, f"这些条目缺 subject：{bad}"))
+            elif not people:
+                out.append(Result("主体映射表", False,
+                                  "principals 是空的 —— 没有任何人能查，等于人格停摆"))
+            else:
+                out.append(Result("主体映射表", True, f"{len(people)} 个主体已登记"))
+
+    raw = env.get("BI_GATE_ALLOWED_ORIGINS", "").strip()
+    origins = [x.strip() for x in raw.split(",") if x.strip()]
+    if not origins:
+        out.append(Result("允许的发起来源", True,
+                          "未声明 —— 运行时按「只允许 human」处理（最严，是安全方向）"))
+    else:
+        unknown = [o for o in origins if o not in ("human", "cron", "cli", "unknown")]
+        if unknown:
+            out.append(Result("允许的发起来源", False,
+                              f"有门禁不认识的来源 {unknown} —— 那条声明永远不会生效，"
+                              f"而且运行时不会报错"))
+        else:
+            out.append(Result("允许的发起来源", True, "、".join(origins)))
+        if "cli" in origins:
+            out.append(Result("放开了 cli", None,
+                              "命令行没有会话身份 —— 等于允许无身份查询。"
+                              "接真实数据之前必须收回"))
+        if "cron" in origins:
+            out.append(Result("放开了 cron", None,
+                              "定时任务以谁的身份查数据是待拍板项（§十一第 6 条）。"
+                              "确认它用的主体已登记且范围合适了吗"))
+
+    out.append(Result("这一层的性质", None,
+                      "门禁拿到的身份是**断言**不是凭证。数据层必须自己独立验证"
+                      "（短期令牌 / 每人独立库账号 / 网关鉴权），否则信任边界仍停在 "
+                      "agent 进程上。在那之前这不是安全边界，是管道 + fail-closed"))
+    return out
+
+
 SECTIONS = [
     ("① 五块字段齐全", check_fields),
     ("② 审批签字齐全", check_approvals),
@@ -745,6 +811,7 @@ SECTIONS = [
     ("④ action_policy 可解析", check_policy_parses),
     ("⑥ 生成物没被手改", check_not_hand_edited),
     ("⑧ 声明了的工具真的调得到", check_declared_tools_are_reachable),
+    ("⑨ 身份透传配没配全", check_identity_is_configured),
     ("⑦ mock 值（未经确认，不拦部署）", check_mock_fields),
 ]
 

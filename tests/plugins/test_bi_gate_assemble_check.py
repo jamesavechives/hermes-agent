@@ -75,6 +75,18 @@ GOOD_APPROVALS = {
 }
 
 
+def _principals(tmp_path):
+    """一份合法的主体映射表。
+
+    "全过"的样本必须真的能跑起来 —— 没有主体表的 profile 运行时会一律拒绝，
+    那不该被当成"检查全过"的样本（同 config.yaml 缺 bi-query 那次）。
+    """
+    p = tmp_path / "principals.json"
+    p.write_text(json.dumps({"principals": {"ou_x": {"subject": "s", "display": "测试"}}},
+                            ensure_ascii=False), encoding="utf-8")
+    return p
+
+
 def _by_name(results, needle):
     return [r for r in results if needle in r.name]
 
@@ -269,11 +281,14 @@ def test_any_failure_blocks_deploy(ac, tmp_path):
     assert code == 1
 
 
+
 def test_all_pass_allows_deploy(ac, tmp_path):
     prof = _profile(tmp_path, f"""BI_GATE_ACTION_MAX=L1
 BI_GATE_ACTION_POLICY={_policy(tmp_path)}
 BI_GATE_REGISTRY={_registry(tmp_path)}
 BI_GATE_TOOLS=query_metric
+BI_GATE_ALLOWED_ORIGINS=human
+BI_GATE_PRINCIPAL_MAP={_principals(tmp_path)}
 """, approvals=GOOD_APPROVALS)
     code, _ = ac.run(prof, skip_runtime=True)
     assert code == 0

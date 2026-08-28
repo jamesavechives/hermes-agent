@@ -21,6 +21,22 @@ import pytest
 PLUGIN_DIR = Path(__file__).resolve().parents[2] / "plugins" / "bi-query"
 
 
+def _gated(args: dict) -> dict:
+    """补上门禁放行时会注入的元数据。
+
+    这些测试直接调 ``handle_query_metric``，等于「门禁已经放行」的那一刻。
+    真实路径上门禁会往 args 里塞 ``_bi_principal``（以谁的名义查）和
+    ``_bi_gate_call_id``（对账用的配对键）。不补的话测的就不是真实调用形状。
+
+    **这不是绕过检查** —— bi-query 拒绝无主体执行的那条规则，由
+    ``test_bi_gate_identity.py`` 里的用例专门守着。
+    """
+    out = dict(args)
+    out.setdefault("_bi_principal", {"subject": "bi_test_principal", "display": "测试主体",
+                                     "origin": "human", "verified": False})
+    out.setdefault("_bi_gate_call_id", "test_call_id")
+    return out
+
 def _load():
     """按文件路径加载 —— 目录名带连字符，不是合法包名，正常 import 走不通。"""
     spec = importlib.util.spec_from_file_location(
@@ -51,39 +67,39 @@ WINDOW = {"start": "2026-08-01", "end": "2026-08-21"}
 
 def test_same_args_same_result(bq):
     args = {"metric": "daily_active_users", "dimensions": ["market"], "time_window": WINDOW}
-    first = bq.handle_query_metric(dict(args))
-    second = bq.handle_query_metric(dict(args))
+    first = bq.handle_query_metric(_gated(dict(args)))
+    second = bq.handle_query_metric(_gated(dict(args)))
     assert first == second, "同样入参必须返回完全一样的字节，否则评估集回归没有意义"
 
 
 def test_dimension_order_does_not_matter(bq):
-    a = bq.handle_query_metric(
+    a = bq.handle_query_metric(_gated(
         {"metric": "daily_active_users", "dimensions": ["market", "channel"], "time_window": WINDOW}
-    )
-    b = bq.handle_query_metric(
+    ))
+    b = bq.handle_query_metric(_gated(
         {"metric": "daily_active_users", "dimensions": ["channel", "market"], "time_window": WINDOW}
-    )
+    ))
     assert json.loads(a)["rows"] == json.loads(b)["rows"]
 
 
 def test_no_dimensions_returns_total(bq):
-    out = json.loads(bq.handle_query_metric({"metric": "daily_active_users", "time_window": WINDOW}))
+    out = json.loads(bq.handle_query_metric(_gated({"metric": "daily_active_users", "time_window": WINDOW})))
     assert out["rows"] == [{"dau": 128400}]
     assert out["dimensions"] == []
 
 
 def test_scanned_rows_scales_with_window(bq):
-    short = json.loads(bq.handle_query_metric(
-        {"metric": "spot_trade_volume", "time_window": {"start": "2026-08-01", "end": "2026-08-02"}}))
-    long_ = json.loads(bq.handle_query_metric(
-        {"metric": "spot_trade_volume", "time_window": {"start": "2026-08-01", "end": "2026-08-21"}}))
+    short = json.loads(bq.handle_query_metric(_gated(
+        {"metric": "spot_trade_volume", "time_window": {"start": "2026-08-01", "end": "2026-08-02"}})))
+    long_ = json.loads(bq.handle_query_metric(_gated(
+        {"metric": "spot_trade_volume", "time_window": {"start": "2026-08-01", "end": "2026-08-21"}})))
     assert long_["meta"]["scanned_rows"] > short["meta"]["scanned_rows"]
 
 
 def test_bad_window_does_not_raise(bq):
     """时间窗格式坏掉时按 1 天算，不抛异常——格式校验是门禁的活，不是这里的。"""
-    out = json.loads(bq.handle_query_metric(
-        {"metric": "daily_active_users", "time_window": {"start": "last_7d", "end": "now"}}))
+    out = json.loads(bq.handle_query_metric(_gated(
+        {"metric": "daily_active_users", "time_window": {"start": "last_7d", "end": "now"}})))
     assert out["rows"], "坏时间窗不应该让查询失败"
 
 
@@ -100,8 +116,8 @@ def _audit_records(caplog):
 
 def test_one_audit_record_per_call(bq, caplog):
     with caplog.at_level(logging.INFO):
-        bq.handle_query_metric({"metric": "daily_active_users", "dimensions": ["market"],
-                                "time_window": WINDOW})
+        bq.handle_query_metric(_gated({"metric": "daily_active_users", "dimensions": ["market"],
+                                "time_window": WINDOW}))
     records = _audit_records(caplog)
     assert len(records) == 1
     r = records[0]
@@ -117,8 +133,8 @@ def test_one_audit_record_per_call(bq, caplog):
 def test_audit_carries_action_shaping_params(bq, caplog):
     """granularity / export 必须进审计——它们决定动作级别，事后对账要看得见。"""
     with caplog.at_level(logging.INFO):
-        bq.handle_query_metric({"metric": "daily_active_users", "granularity": "row",
-                                "export": True, "time_window": WINDOW})
+        bq.handle_query_metric(_gated({"metric": "daily_active_users", "granularity": "row",
+                                "export": True, "time_window": WINDOW}))
     r = _audit_records(caplog)[0]
     assert r["granularity"] == "row"
     assert r["export"] is True
@@ -126,7 +142,7 @@ def test_audit_carries_action_shaping_params(bq, caplog):
 
 def test_missing_metric_is_rejected_and_logged(bq, caplog):
     with caplog.at_level(logging.INFO):
-        out = json.loads(bq.handle_query_metric({}))
+        out = json.loads(bq.handle_query_metric(_gated({})))
     assert "error" in out
     r = _audit_records(caplog)[0]
     assert r["event"] == "rejected_by_tool"
@@ -141,15 +157,15 @@ def test_unregistered_metric_is_not_blocked_here(bq, caplog):
     前者是执行层的事实，后者是判定，说出后者就等于把判定复制到了第二处。
     """
     with caplog.at_level(logging.INFO):
-        out = json.loads(bq.handle_query_metric({"metric": "revenue_v2", "time_window": WINDOW}))
+        out = json.loads(bq.handle_query_metric(_gated({"metric": "revenue_v2", "time_window": WINDOW})))
     assert out["error"] == "no_fixture"
     assert "无权" not in json.dumps(out, ensure_ascii=False)
     assert _audit_records(caplog)[0]["event"] == "executed"
 
 
 def test_unknown_dimension_reports_what_exists(bq):
-    out = json.loads(bq.handle_query_metric(
-        {"metric": "daily_active_users", "dimensions": ["uid"], "time_window": WINDOW}))
+    out = json.loads(bq.handle_query_metric(_gated(
+        {"metric": "daily_active_users", "dimensions": ["uid"], "time_window": WINDOW})))
     assert out["error"] == "no_fixture_for_dimensions"
     assert "market" in out["available_dimension_sets"]
 
@@ -166,7 +182,7 @@ def test_schema_fields_match_gate_inputs(bq):
 
 def test_result_declares_stub_backend(bq):
     """结果必须自曝是桩数据——不然有人会拿去写报告。"""
-    out = json.loads(bq.handle_query_metric({"metric": "daily_active_users", "time_window": WINDOW}))
+    out = json.loads(bq.handle_query_metric(_gated({"metric": "daily_active_users", "time_window": WINDOW})))
     assert out["meta"]["backend"] == "stub"
     assert "不可用于对外结论" in out["meta"]["note"]
 

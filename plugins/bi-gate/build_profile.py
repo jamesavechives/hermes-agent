@@ -77,6 +77,10 @@ DECLARATIONS = ("persona", "facts", "authorization", "skills", "fallback")
 #: manifest 文件名。放在运行时目录里，跟着 profile 走。
 MANIFEST = ".generated.json"
 
+#: 认得的发起来源。和 identity.classify_origin 返回的那几个必须一致 ——
+#: 声明里写一个门禁不认识的来源，等于那条声明永远不生效，而且不会报错。
+ORIGINS = ("human", "cron", "cli", "unknown")
+
 #: 工具名 → 提供它的插件。生成 config.yaml 时据此把插件也写进 plugins.enabled。
 #:
 #: 2026-08-28 实测发现的坑：原先这里硬编码只写 ``- bi-gate``，于是生成出来的
@@ -313,6 +317,36 @@ def render_env(auth: Dict[str, Any], runtime: Path) -> Tuple[str, List[str]]:
     if session_max is None:
         pending.append("session_scan_max 待定 —— 只有单次限额，拆调用绕不过的那条不生效")
 
+    # ── 身份透传 ──────────────────────────────────────────────────────
+    origins = _require(auth, "allowed_origins", "authorization.yaml")
+    if origins is None:
+        pending.append("allowed_origins 待定 —— 运行时按「只允许 human」处理")
+    elif not isinstance(origins, list) or not origins:
+        raise DeclError("authorization.yaml 的 allowed_origins 必须是非空列表")
+    else:
+        unknown = [o for o in origins if o not in ORIGINS]
+        if unknown:
+            raise DeclError(
+                f"allowed_origins 里有不认识的来源 {unknown}，支持的是 {sorted(ORIGINS)}")
+        if "cron" in origins:
+            pending.append(
+                "allowed_origins 放开了 cron —— 定时任务以谁的身份查数据是待拍板项"
+                "（§十一第 6 条）。放开之前请确认它用的主体已经登记且范围合适")
+        if "cli" in origins:
+            pending.append(
+                "allowed_origins 放开了 cli —— 命令行没有会话身份，"
+                "放开等于允许无身份查询。接真实数据前必须收回")
+
+    principals = _require(auth, "principals", "authorization.yaml")
+    if principals is None:
+        pending.append("principals 待定 —— 主体映射表为空，所有查询会被拒")
+    elif not isinstance(principals, dict):
+        raise DeclError("authorization.yaml 的 principals 必须是字典")
+    else:
+        for key, item in principals.items():
+            if not isinstance(item, dict) or not item.get("subject"):
+                raise DeclError(f"principals 条目 {key!r} 缺 subject")
+
     lines = [
         "# 由 build_profile.py 生成，不要手改。",
         "# 手改会被装配期检查拦下（hash 与 .generated.json 对不上）。",
@@ -327,6 +361,9 @@ def render_env(auth: Dict[str, Any], runtime: Path) -> Tuple[str, List[str]]:
     lines.append(f"BI_GATE_TOOLS={','.join(str(t) for t in tools)}")
     if session_max is not None:
         lines.append(f"BI_GATE_SESSION_SCAN_MAX={int(session_max)}")
+    if origins:
+        lines.append(f"BI_GATE_ALLOWED_ORIGINS={','.join(str(o) for o in origins)}")
+    lines.append(f"BI_GATE_PRINCIPAL_MAP={runtime / 'principals.json'}")
     lines.append(f"BI_AUDIT_LOG={runtime / 'audit.jsonl'}")
     lines.append("")
     lines.append(ENV_MARKER)
@@ -432,11 +469,16 @@ def build(src: Path, runtime: Path) -> Tuple[Dict[str, str], List[str], List[str
     config, p_cfg = render_config(decl["skills"], decl["authorization"].get("tools") or [])
     p_fb = collect_fallback_pending(decl["fallback"])
 
+    principals_json = json.dumps(
+        {"principals": decl["authorization"].get("principals") or {}},
+        ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+
     files = {
         "SOUL.md": soul,
         "bi_registry.json": registry,
         ".env": env,
         "config.yaml": config,
+        "principals.json": principals_json,
     }
     if policy:
         files["action_policy.json"] = policy

@@ -41,6 +41,8 @@ BI_GATE_ACTION_MAX=L1
 BI_GATE_SESSION_SCAN_MAX=100000000
 
 # 判定留痕。未声明则本次判定不留痕，事后无法对账。
+BI_GATE_ALLOWED_ORIGINS=human
+BI_GATE_PRINCIPAL_MAP=$DEST/principals.json
 BI_AUDIT_LOG=$DEST/audit.jsonl
 ENV
 
@@ -56,6 +58,19 @@ cat > "$DEST/approvals.json" <<'JSON'
     "by": ["事实层责任人"],
     "at": "2026-08-27",
     "ref": "https://github.com/decodeex/hermes-agent/pull/0"
+  }
+}
+JSON
+
+# 主体映射表 —— 谁能以什么身份查数据。
+# 没有它运行时一律拒绝（方向对，但业务全停），所以样例必须自带一份。
+cat > "$DEST/principals.json" <<'JSON'
+{
+  "principals": {
+    "ou_mock_analyst_001": {
+      "subject": "bi_analyst_mock",
+      "display": "示例分析师（mock）"
+    }
   }
 }
 JSON

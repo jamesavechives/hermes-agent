@@ -51,6 +51,9 @@ def _profile(tmp_path: Path, *, metrics, session_max=None, tools="query_metric",
         f"BI_GATE_ACTION_MAX={action_max}",
         f"BI_GATE_TOOLS={tools}",
         f"BI_AUDIT_LOG={d / 'audit.jsonl'}",
+        # 身份两项。缺了运行时一律拒绝，那样这个 profile 就不是"自相容"的样本。
+        "BI_GATE_ALLOWED_ORIGINS=human",
+        f"BI_GATE_PRINCIPAL_MAP={d / 'principals.json'}",
     ]
     if session_max is not None:
         env.append(f"BI_GATE_SESSION_SCAN_MAX={session_max}")
@@ -59,6 +62,9 @@ def _profile(tmp_path: Path, *, metrics, session_max=None, tools="query_metric",
     # 那样它就不该被当成"自相容的合法样本"（检查 ⑧，2026-08-28 加）。
     (d / "config.yaml").write_text(
         "plugins:\n  enabled: [bi-gate, bi-query]\n", encoding="utf-8")
+    (d / "principals.json").write_text(json.dumps({
+        "principals": {"ou_x": {"subject": "s", "display": "测试"}}
+    }, ensure_ascii=False), encoding="utf-8")
     return d
 
 

@@ -33,6 +33,12 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional
 
+from .identity import (
+    PRINCIPAL_ARG,
+    IdentityVerdict,
+    Principal,
+    resolve_principal,
+)
 from .rules import (
     CONDITION_OPS,
     GATE_SOURCE,
@@ -370,6 +376,10 @@ def _audit(
         "timezone": (verdict.detail or {}).get("timezone"),
         "timezone_source": (verdict.detail or {}).get("timezone_source"),
         "detail": dict(verdict.detail) if verdict.detail else None,
+        # 以谁的名义查。**没有主体时也要写成 null 而不是不写这个键** ——
+        # 下面那行 `if v` 会把假值整个丢掉，于是"这次调用没有身份"和"这条记录
+        # 是加身份之前写的"在审计里长得一模一样。写成 null 才分得开。
+        "principal": None,
         **{k: v for k, v in context.items() if v},
     }
     _write_audit_line(record)
@@ -603,6 +613,26 @@ def _on_pre_tool_call(
             action_max=action_max,
         )
 
+        # ── 身份 ──────────────────────────────────────────────────────
+        # 「查什么」判完再判「以谁的名义查」。顺序这样定是因为拒因不该互相盖住：
+        # 一条越权的查询，即使发起人合法，也该报越权而不是报身份问题。
+        #
+        # 但**身份不通过一定拦**，哪怕查询本身完全合法 —— 接上真实数据之后，
+        # 一条不知道是谁发起的查询，等于用共享账号查全量。这正是门禁管不了的
+        # 那类洞（门禁管「查什么」，管不了「以谁的名义查」）。
+        id_verdict = resolve_principal()
+        if not id_verdict.ok:
+            # 拒绝的构造方式必须和 rules 里其它拒绝**完全一样**：code 决定
+            # blocked（它是只读属性，传不进去），reason 前面带 GATE_SOURCE 和
+            # 全角冒号。第一版写成 Verdict(blocked=True, ...) —— TypeError，
+            # 被兜底转成 rejected_gate_error。方向没错（还是拦），但模型看到的是
+            # 「门禁故障，请联系值班」而不是「这次调用没有身份」，排查会跑偏。
+            verdict = Verdict(
+                code=id_verdict.code,
+                reason=f"{GATE_SOURCE}：{id_verdict.reason}",
+                detail={"identity_code": id_verdict.code},
+            )
+
         # 单次预估：审计要记（放行的也记，事后才能对账「预估 vs 实际」），
         # 会话累计也要用它。评估一次，两处共用。
         spec = registry.get(args.get("metric"))
@@ -641,6 +671,7 @@ def _on_pre_tool_call(
             task_id=context.get("task_id"),
             tool_call_id=context.get("tool_call_id"),
             call_id=call_id,
+            principal=id_verdict.principal.to_audit() if id_verdict.principal else None,
         )
         if not verdict.blocked:
             # 放行之后才累加 —— 被拦的调用没有真的去扫，不该占额度。
@@ -649,7 +680,12 @@ def _on_pre_tool_call(
             # 宿主的 pre_tool_call 支持 {"action": "modify", "args": {...}}，
             # 这条通道就是干这个用的；不走它的话，两边只能靠时间近似配对。
             # 下划线开头表示这是元数据，不是查询语义的一部分。
-            return {"action": "modify", "args": {CALL_ID_ARG: call_id}}
+            # 主体和配对键一起塞进去。bi-query 拿不到主体就不许执行 ——
+            # 它是真正要去连数据层的那一侧，不该相信"没人给我身份就是没关系"。
+            return {"action": "modify", "args": {
+                CALL_ID_ARG: call_id,
+                PRINCIPAL_ARG: id_verdict.principal.to_audit() if id_verdict.principal else None,
+            }}
         return {"action": "block", "message": verdict.reason or "BI 门禁拦截。"}
     except Exception:
         return _gate_error_block(args, context)
