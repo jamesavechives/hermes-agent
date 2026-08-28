@@ -486,15 +486,25 @@ def _audit_tool_denied(tool_name: str, allowed: frozenset, context: Mapping[str,
     和指标判定分开记：这条回答的是「这个人格试图用一个它没被授权的工具」，
     和「它查了一个不该查的指标」不是一回事，事后统计要分得开。
     """
+    # ts / profile / call_id 必须和 _audit 写的记录**同构**。
+    # 这一条原先三个都没有：加时间戳和 profile 那次只改了 _audit，漏了这个
+    # 单独的函数。后果是白名单拒绝在按时间查、按人格分、对账时全都看不见 ——
+    # 而「这个人格试图用没被授权的工具」恰恰是最该被看见的一类记录。
+    # 2026-08-28 真跑一次模型、翻审计才发现（那次前两条 ts 是 None）。
     _write_audit_line({
         "event": "bi_gate_verdict",
         "source": GATE_SOURCE,
+        "profile": _profile_name(),
+        "ts": int(time.time()),
         "gate_result": "rejected_tool_not_allowed",
         "tool": tool_name,
         "allowed_tools": sorted(allowed),
         "session_id": context.get("session_id"),
         "task_id": context.get("task_id"),
         "tool_call_id": context.get("tool_call_id"),
+        # 被拒的调用不会有执行记录，配对不上是正常的；记 call_id 是为了能和
+        # 宿主转录对上，查"模型当时到底想干什么"。
+        "call_id": str(context.get("tool_call_id") or "") or None,
     })
 
 

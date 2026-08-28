@@ -369,16 +369,27 @@ def main() -> int:
         print(f"   [✗] 注册表里声明了 max_scan_rows 却没有 rows_per_day 的指标："
               f"{'、'.join(no_rows_per_day)} —— 这些指标的任何查询都会被拒")
 
-    # ── ⑦ 宿主级豁免：桥接工具 ────────────────────────────────────
-    # 这一段不是我们的插件能决定的事，是 Hermes 本身的派发结构决定的：
-    # ``model_tools.handle_function_call`` 里，``is_bridge_tool()`` 分支在
-    # pre_tool_call 派发点**之前**就 return 了（本仓库 model_tools.py:1267
-    # 对 :1384）。于是三个桥接工具根本走不到任何 pre_tool_call hook。
+    # ── ⑦ 桥接工具走的是哪条派发路径 ──────────────────────────────
+    # ⚠️ 这一段**测的不是真实 agent 走的路径**，看结果时必须知道这一点。
     #
-    # 所以这里不做断言，做测量：每次部署自检都实地打一遍，把当前事实印出来。
-    # 写死成"已知它不受管"的话，等哪天上游把桥接也接进 hook，我们不会知道；
-    # 而"以为拦住了其实没拦"正是这套门禁一路在堵的那种失效。
-    print("\n⑦ 桥接工具（宿主级，不由本插件决定）：")
+    # Hermes 有三个 pre_tool_call 派发点：
+    #   agent/tool_executor.py:627        真实 agent 循环，**派发前**触发，
+    #                                     对所有工具生效（包括桥接工具），
+    #                                     之后往下游传 skip_pre_tool_call_hook=True
+    #   agent/agent_runtime_helpers.py:3085
+    #   model_tools.py:1387               在 is_bridge_tool 分支**之后**
+    #
+    # 本文件用 model_tools.handle_function_call 直接调，走的是第三条 ——
+    # 于是桥接工具在这里绕过门禁。**但真实 agent 不走这条。** 2026-08-28
+    # 真跑一次模型验证：它调 tool_search / tool_describe 时，审计里是
+    # rejected_tool_not_allowed，门禁拦住了。
+    #
+    # 这一段之前的结论（「三个桥接工具不经过门禁」）因此是错的 —— 错的方式很
+    # 典型：**测了一条真实系统不走的入口**，和调研 §二第六条（探针命令 44 个
+    # 测试全绿却根本执行不了）是同一类。保留这一段是为了记录这个区别，
+    # 不是为了报警。
+    print("\n⑦ 桥接工具（注意：本段测的是 handle_function_call 入口，")
+    print("   **不是真实 agent 走的 tool_executor 路径**，见代码注释）：")
     bridge_cases = [
         ("tool_search", {"query": ""}, "枚举本会话可调度的工具名与描述"),
         ("tool_describe", {"name": "__nonexistent__"}, "读任意可调度工具的参数 schema"),
@@ -427,8 +438,10 @@ def main() -> int:
             ok_bridge = False
 
     if leaked:
-        print(f"   → 已知缺口：{'、'.join(leaked)} 绕过白名单。泄的是工具名与参数 schema，"
-              f"不是执行权限。见设计方案 §5.3 与 §八。")
+        print(f"   → {'、'.join(leaked)} 在 handle_function_call 这条入口上绕过白名单。")
+        print(f"     **真实 agent 不走这条入口**（走 tool_executor.py:627，派发前拦一切），")
+        print(f"     2026-08-28 真跑模型验证过：桥接工具被 rejected_tool_not_allowed 拦下。")
+        print(f"     所以这不是生产缺口，是两条入口行为不一致。见设计方案 §5.5。")
 
     allok = (ok1 and ok2 and ok3 and ok_action and ok4 and ok_bridge
              and not no_rows_per_day)

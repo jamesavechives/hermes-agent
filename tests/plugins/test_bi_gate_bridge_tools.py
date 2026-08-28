@@ -1,27 +1,44 @@
-"""桥接工具与工具白名单的关系 —— 实测，不是读代码得出的。
+"""桥接工具与工具白名单的关系 —— 一次写错又更正的实测。
 
 背景
 ----
 Hermes 有三个「桥接工具」：``tool_search`` 找工具、``tool_describe`` 读某个
 工具的参数 schema、``tool_call`` 按名字调用另一个工具。
 
-``model_tools.handle_function_call`` 里，``is_bridge_tool()`` 分支在
-pre_tool_call 的派发点**之前**就 return 了。结果是：
+**2026-08-27 我在这里写下的结论是错的**，错法值得留档。
 
-- ``tool_search`` / ``tool_describe`` 走不到任何 hook —— 我们的白名单管不着；
-- ``tool_call`` 自己也走不到，但它会带着底层工具名**递归回**
-  ``handle_function_call``，那一次是完整派发，门禁在那里拦得住。
+当时读到 ``model_tools.handle_function_call`` 里 ``is_bridge_tool()`` 分支排在
+pre_tool_call 派发点之前（``model_tools.py:1267`` 对 ``:1387``），实测也确实
+穿了过去，于是断定「桥接工具不受门禁管，泄的是侦察面」。
 
-所以执行面是闭合的，泄的是侦察面（工具名、描述、参数 schema）。
+**漏了：Hermes 有三个 pre_tool_call 派发点，真实 agent 走的不是那条。**
 
-为什么把「缺口存在」也写成测试
-------------------------------
-这三条断言的是**当前事实**，不是我们期望的状态。上游哪天把桥接接进 hook，
-这里会红，我们就知道该去把设计方案 §八的已知缺口删掉。反过来，如果只在文档
-里记一句「桥接不受管」，等它被修好了我们也不会知道，文档就开始骗人。
+- ``agent/tool_executor.py:627`` —— 真实 agent 循环，**在派发之前**触发，
+  对所有工具一视同仁；之后往下游传 ``skip_pre_tool_call_hook=True`` 防重复。
+- ``agent/agent_runtime_helpers.py:3085`` —— 另一条运行时路径。
+- ``model_tools.py:1387`` —— 直接调 ``handle_function_call`` 才会到，
+  在桥接分支之后。**我当时测的是这条。**
 
-同一份理由的反面：如果哪天 ``tool_call`` 的递归被改掉了，
-:func:`test_tool_call_cannot_smuggle_a_blocked_tool` 会红 —— 那是真出事了。
+而且 executor 对 ``tool_call`` 做的是**拆包再派发**（``:1144``，注释原文
+"hooks must observe the real tool name"）—— hook 看到的是底层工具名，不是
+``tool_call``。比我原先以为的更强。
+
+8/28 用 qwen3.7-plus 真跑一轮验证：模型开局调 ``tool_search`` /
+``tool_describe``，审计里两条都是 ``rejected_tool_not_allowed``。**拦住了。**
+
+这个错的形状
+------------
+**测了一条真实系统不走的入口。** 和调研 §二第六条同类 —— 那次是探针命令在
+44 个测试全绿的情况下根本执行不了，因为测试都按文件路径 import、没人真按
+文档敲一次。判断一个实测算不算数，得先回答「真实系统走的是这条吗」。
+
+这份文件现在测的
+----------------
+1. 插件自己不留代码级豁免（唯一一条我们完全说了算的）；
+2. 真实 agent 路径的派发顺序 —— hook 在派发**之前**；
+3. 借道 ``tool_call`` 调白名单外的工具必须拦住；
+4. 我们的 hook 在任何输入下都不许抛异常 —— 因为宿主那层套着
+   ``except Exception: return None``，**抛了就等于放行**。
 """
 
 from __future__ import annotations
@@ -93,27 +110,84 @@ def test_declared_bridge_name_is_allowed_like_any_other(gate, monkeypatch):
 # 二、宿主派发结构的当前事实
 # ---------------------------------------------------------------------------
 
-def test_bridge_branch_returns_before_the_hook_dispatch():
-    """源码层面确认顺序：桥接分支在 pre_tool_call 派发点之前。
+def test_real_agent_path_fires_the_hook_before_dispatch():
+    """真实 agent 走的那条路：hook 在派发之前，对所有工具生效。
 
-    这条用行号比对，粗糙但直接。它红了说明上游动了派发结构 —— 那正是需要有人
-    去重测一遍 §⑦ 的时刻。
+    这是**更正后**该守的那条。原先这里断言的是 ``model_tools.py`` 里桥接分支
+    排在 hook 之前 —— 那句话是真的，但真实 agent 不走那个入口，所以它红不红
+    都说明不了门禁有没有拦住桥接工具。
+
+    这条红了，说明上游把 executor 的派发顺序动了 —— 那才是真该去重测的时刻。
     """
-    text = (REPO / "model_tools.py").read_text(encoding="utf-8")
-    lines = text.splitlines()
+    text = (REPO / "agent" / "tool_executor.py").read_text(encoding="utf-8")
 
-    bridge_line = next(
-        (i for i, ln in enumerate(lines) if "is_bridge_tool(function_name)" in ln), None)
-    hook_line = next(
-        (i for i, ln in enumerate(lines) if "_dispatch_pre_tool_call_hooks(" in ln
-         and "import" not in ln), None)
-
-    assert bridge_line is not None, "找不到桥接分支 —— 上游结构变了"
-    assert hook_line is not None, "找不到 pre_tool_call 派发点 —— 上游结构变了"
-    assert bridge_line < hook_line, (
-        "桥接分支现在排在 hook 之后了 —— 如果桥接工具已经过 hook，"
-        "设计方案 §八里那条已知缺口该删掉了"
+    assert "_dispatch_pre_tool_call_hooks(" in text, (
+        "tool_executor 里找不到 pre_tool_call 派发 —— 上游结构变了，"
+        "桥接工具是否仍被门禁覆盖需要重新实测"
     )
+    # executor 派发之后往下游传 skip=True，靠这个避免 model_tools 那层重复触发。
+    # 反过来说：这个标记在，就证明 executor 这层确实已经触发过了。
+    assert "skip_pre_tool_call_hook=True" in text, (
+        "下游 skip 标记没了 —— executor 可能不再是首个派发点"
+    )
+    # tool_call 拆包：hook 看到底层工具名而不是桥接名。
+    assert "hooks must observe the real tool name" in text, (
+        "tool_call 的拆包注释没了 —— 确认 hook 看到的还是不是底层工具名"
+    )
+
+
+def test_our_hook_never_raises(gate):
+    """我们的 hook 在任何输入下都不许抛异常 —— **抛了等于放行**。
+
+    ``tool_executor.py`` 里调 hook 那段外面套着 ``except Exception: return None``
+    （见 ``_resolve_pre_tool_block``），返回 None 的含义是「没有插件要拦」。
+    所以我们这边一个未捕获的异常不会变成报错、不会留痕，只会安静地把这次调用
+    放过去 —— 是失效开门，不是失效关门。
+
+    这不是假想：门禁里有 json 解析、有类型转换、有注册表查找，任何一处对畸形
+    参数不设防都会走到这里。
+    """
+    hostile = [
+        {},
+        {"metric": None},
+        {"metric": 123},
+        {"metric": ["a"]},
+        {"metric": {"nested": "dict"}},
+        {"metric": "daily_active_users", "time_window": "不是字典"},
+        {"metric": "daily_active_users", "time_window": {"timezone": []}},
+        {"metric": "daily_active_users", "time_window": {"start": object()}},
+        {"metric": "daily_active_users", "max_scan_rows": "很多"},
+        {"metric": "daily_active_users", "filters": float("nan")},
+        {"metric": "\x00\uffff"},
+        {"metric": "x" * 100000},
+    ]
+    for tool in ("query_metric", "tool_search", "什么都不是"):
+        for args in hostile:
+            try:
+                gate._on_pre_tool_call(tool_name=tool, args=args)
+            except Exception as exc:          # noqa: BLE001 —— 就是要抓一切
+                raise AssertionError(
+                    f"hook 对 tool={tool!r} args={args!r} 抛了 {type(exc).__name__}: {exc}。"
+                    f"宿主会把它当成「无人拦截」，这次调用就放行了"
+                ) from exc
+
+    # 防空转：上面那堆输入必须真的走进门禁逻辑，而不是在某个早退分支就返回了。
+    # 否则这个测试会在门禁被整个短路的情况下依然全绿 —— 那正是它要防的失效。
+    assert gate._on_pre_tool_call(tool_name="什么都不是", args={}) is not None, (
+        "白名单外的工具没被拦 —— 上面那轮压根没走到门禁逻辑，本测试是空转的"
+    )
+    assert gate._on_pre_tool_call(tool_name="query_metric", args={"metric": 123}) is not None, (
+        "畸形 metric 没被拦 —— 同上"
+    )
+
+    # 参数不是 dict 的极端情况单独试 —— 宿主理论上不会这么传，但门禁不该假设。
+    for bad_args in (None, "字符串", 42, []):
+        try:
+            gate._on_pre_tool_call(tool_name="query_metric", args=bad_args)
+        except Exception as exc:              # noqa: BLE001
+            raise AssertionError(
+                f"hook 对 args={bad_args!r} 抛了 {type(exc).__name__} —— 同样等于放行"
+            ) from exc
 
 
 def test_tool_call_cannot_smuggle_a_blocked_tool(gate, monkeypatch, tmp_path):
