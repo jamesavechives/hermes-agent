@@ -551,10 +551,24 @@ def _on_pre_tool_call(
     返回 ``None`` 表示放行（其它工具一律不管）。
 
     整个函数体包在兜底里：**任何未预料的异常都转成拦截，而不是让它抛出去**。
-    因为 Hermes 侧对 pre_tool_call 的调用包在 ``except Exception`` 中且只记
-    debug 日志（见 ``model_tools.py`` 里 ``_dispatch_pre_tool_call_hooks``
-    的调用处），异常逃出去就等于门禁静默消失 —— 没人看得见，调用照常放行。
-    这个失败方向对资金/口径类系统是不可接受的，所以在插件内部就把它扭回来。
+
+    因为宿主那边**两层**都会把异常吃掉，且都当作「无人拦截」：
+
+    - ``hermes_cli/plugins.py:5140`` —— ``invoke_hook`` 每个回调各自套
+      try/except，抛了就记一条 ``logger.warning`` 并**不往结果里追加**。
+      返回空列表 = 没有插件要拦。
+    - ``agent/tool_executor.py`` ``_resolve_pre_tool_block`` 外面还有一层
+      ``except Exception: return None`` —— 这层连日志都没有。
+
+    2026-08-28 实测（注册一个必抛的回调）：``invoke_hook`` 返回 ``[]``，
+    ``_dispatch_pre_tool_call_hooks`` 返回 ``block_message=None`` —— 放行。
+
+    **也就是说门禁在宿主眼里是「失效开门」的**：崩了等于没意见。这和这套东西
+    一路在讲的「判定不了一律当不通过」正好相反，而且我们改不了宿主。所以只能
+    在插件内部把方向扭回来 —— 异常在我们这儿就转成 block，绝不让它逃出去。
+
+    （原先这段注释把出处写成 ``model_tools.py``。那是 2026-08-27 桥接工具那次
+    看错入口的余波 —— 结论侥幸是对的，引的位置是错的。08-28 更正。）
     """
     try:
         # ── 第一道：工具白名单 ──────────────────────────────────────
