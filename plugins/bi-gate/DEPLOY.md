@@ -189,3 +189,67 @@ BI_GATE_ACTION_MAX=L1                                      # ③ 的另一半：
 （canary 本来就该被拦），但此刻所有正常查询也在被拒。**过度拦截靠业务侧发现，不靠探针**——
 方向上这是可接受的（业务停摆看得见，静默放行看不见），但值班要知道这个盲区。
 部署自检 `verify.py` 会抓到，因为它里面有一条本该放行的调用。
+
+---
+
+## 十、接真实数据（2026-08-28）
+
+### 10.1 切换开关
+
+```
+BI_QUERY_BACKEND=starrocks      # 默认 stub；切真库必须是显式动作
+BI_SR_HOST=<StarRocks FE 主机>
+BI_SR_PORT=9030
+BI_SR_USER=<只读账号>
+BI_SR_PASSWORD=<由部署方填，不进仓库>
+```
+
+**任何情况下都不会从真实后端静默退回桩数据。** 连接信息不全、连不上、查询失败，
+一律报错。让人以为在看真实数据、其实是假数，比查不到严重得多 —— 而且假数不会
+有人来投诉，它会被直接拿去用。
+
+### 10.2 用哪个账号：现状是全库读，应该建专用账号
+
+生产上现有的只读账号（`developer`、`metabase`、`bifufx_ro`）**权限都是
+`SELECT ON ALL TABLES IN ALL DATABASES`**，其中 `developer` 还是空密码。
+拿任何一个来跑，爆炸半径都是全库 —— 而助手实际只需要 `ads`。
+
+应该建一个专用账号。这条 DDL 需要在生产执行，**不是研发能自己动的**：
+
+```sql
+CREATE ROLE bi_agent_ro;
+GRANT SELECT ON ALL TABLES IN DATABASE ads TO ROLE bi_agent_ro;
+CREATE USER 'bi_agent_ro'@'10.%.%.%' IDENTIFIED BY '<由运维设置>';
+GRANT bi_agent_ro TO USER 'bi_agent_ro'@'10.%.%.%';
+```
+
+在它建好之前用现有账号跑是可以的，但**必须知道爆炸半径是全库**，
+不能靠「反正我们只查 ads」—— 那是约定，不是强制。
+
+### 10.3 网络：dev-frontend-Hermes 目前连不到 StarRocks
+
+实测（2026-08-28）：
+
+| 检查 | 结果 |
+|---|---|
+| hermes 机器 IP | `10.10.2.57`（匹配账号的 `10.%.%.%`，网段是对的） |
+| StarRocks FE 地址 | `starrocks-fe-search.starrocks.svc.cluster.local:9030`（**K8s 集群内**） |
+| 机器上有 mysql 客户端 | **没有** |
+| 机器上有 tsh | 有（`/usr/local/bin/tsh`），但**未登录** |
+
+所以真实查询目前只能从有 Teleport 代理的机器上跑。要让 agent 在服务器上查真数据，
+需要运维给出下面之一：
+
+1. 集群内可达的 FE 地址（NodePort / 内网 LB），或
+2. 服务器上的 Teleport 机器身份（Machine ID / bot），让它能常驻一个
+   `tsh proxy app new-live-starrocks`
+
+另外服务器上要装 mysql 客户端（当前后端用它连库）。
+
+### 10.4 聚合方式是个已知的坑
+
+现在**一律 SUM**。对「去重人数」（dau/uv 类）和价格类指标，跨天求和是错的。
+
+注册表还给不出正确的聚合方式 —— 数仓的列注释里没写。所以结果里强制带一句
+`aggregation_caveat` 说明这个局限。**这不是解决，是把问题摆到台面上**：
+正解是让 `ads` 层的列注释（或另一份口径表）声明每个指标该怎么聚合。

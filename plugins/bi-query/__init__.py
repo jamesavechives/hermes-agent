@@ -14,15 +14,22 @@
 这次调用没经过门禁** —— 要么门禁没启用，要么走的是别的工具名。这正是
 《人格门禁设计方案》图 5 里那几条绕过路径唯一能被发现的方式。
 
-阶段一为什么是桩数据，不接 StarRocks
-------------------------------------
-不是偷懒，是顺序问题。方案 §6.2 要求「查询以发起人身份执行，agent 自己没有
-独立的数据权限」。现在既没有发起人身份透传，也没定「无人发起的任务用谁的身份」
-（§十一待拍板第 6 条）。此刻用一个共享服务账号连上 StarRocks，等于亲手造出
-§6.2 明令禁止的东西，而且一旦跑起来就很难退回去。
+两个后端：桩数据与真实 StarRocks
+--------------------------------
+由 ``BI_QUERY_BACKEND`` 选，**默认 stub**。切到真实后端必须是显式动作。
 
-所以先用桩数据把「模型 → 门禁 → 工具 → 审计」这条链闭合，等身份透传定了再换
-真实后端 —— 换的时候只动 ``_backend_stub``，工具契约和审计格式都不变。
+顺序上先做桩数据不是偷懒：方案 §6.2 要求「查询以发起人身份执行」，而在身份
+透传（§5.7）做好之前接真库，等于亲手造出 §6.2 明令禁止的共享账号查全量。
+现在身份那层有了，所以真实后端可以接了 —— 但要清楚它买到了什么、没买到什么：
+
+* **买到了**：主体会跟着 SQL 注释进 StarRocks 的查询日志，数据库侧的审计
+  能和我们的审计对上号；查什么被注册表限死。
+* **没买到**：StarRocks 这个版本没有行级安全，注释不会被任何东西核对。
+  它是事后追溯，不是事前拦截。见《StarRocks 权限模型现状调研 v1.0》。
+
+**任何情况下都不从真实后端静默退回桩数据。** 配置不全、连不上、查询失败，
+一律报错。让人以为在看真实数据、其实是假数，比查不到严重得多 —— 而且假数
+不会有人来投诉，它会被直接拿去用。
 """
 
 from __future__ import annotations
@@ -237,6 +244,53 @@ def _audit(record: Dict[str, Any]) -> bool:
     return ok
 
 
+def _dispatch_backend(metric, dimensions, window, *, principal, call_id):
+    """按 ``BI_QUERY_BACKEND`` 选后端。返回 ``(后端名, 结果, 错误)``。
+
+    **真实后端出错时返回错误，绝不退回桩数据。** 静默降级会造出
+    「以为在看真实数据、其实是假数」——那种错没人会来投诉，因为它看起来是对的。
+    """
+    from . import backend_starrocks as sr
+
+    name = sr.backend_name()
+    if name == "stub":
+        return "stub", _backend_stub(metric, dimensions, window), None
+    if name != "starrocks":
+        return name, {"rows": [], "scanned_rows": 0}, (
+            f"不认识的后端 {name!r}（{sr.BACKEND_ENV} 只支持 stub / starrocks）。"
+            f"不猜、不回落。")
+    try:
+        return "starrocks", sr.run(metric, dimensions, window,
+                                   principal=principal, call_id=call_id), None
+    except sr.BackendError as exc:
+        return "starrocks", {"rows": [], "scanned_rows": 0}, str(exc)
+
+
+def _meta(backend: str, fx: dict, result: dict) -> dict:
+    """结果里的 meta。**后端是哪个必须写在里面** —— 模型要能据此措辞。
+
+    真跑模型验证过：桩数据那句 note 一挂上，模型每次都会主动告诉用户
+    「这是桩数据不能用于对外结论」。那句话是有效的，所以真实后端也照此办理，
+    只是内容换成别的必须说清的东西（聚合方式的局限、数据截止到哪天）。
+    """
+    if backend == "stub":
+        return {
+            "backend": "stub",
+            "fixtures_version": fx.get("version", ""),
+            "scanned_rows": result.get("scanned_rows", 0),
+            "note": "阶段一桩数据，非真实业务数值，不可用于对外结论",
+        }
+    meta = {
+        "backend": backend,
+        "scanned_rows": result.get("scanned_rows", 0),
+        "source": "StarRocks ads 层（数仓应用层）",
+    }
+    for k in ("aggregation", "aggregation_caveat", "freshness", "metric_description"):
+        if result.get(k) is not None:
+            meta[k] = result[k]
+    return meta
+
+
 # ---------------------------------------------------------------------------
 # 工具入口
 # ---------------------------------------------------------------------------
@@ -283,7 +337,9 @@ def handle_query_metric(args: Dict[str, Any], **_kwargs: Any) -> str:
                      "数据按人授权，不知道是谁就查不了。",
         }, ensure_ascii=False)
 
-    result = _backend_stub(metric, dimensions, window)
+    backend, result, backend_error = _dispatch_backend(
+        metric, dimensions, window,
+        principal=principal, call_id=str(args.get(GATE_CALL_ID_ARG) or ""))
     fx = _fixtures()
 
     audit: Dict[str, Any] = {
@@ -310,10 +366,15 @@ def handle_query_metric(args: Dict[str, Any], **_kwargs: Any) -> str:
         "export": export,
         "row_count": len(result.get("rows", [])),
         "scanned_rows": result.get("scanned_rows", 0),
-        "backend": "stub",
-        "fixtures_version": fx.get("version", ""),
+        "backend": backend,
+        "fixtures_version": fx.get("version", "") if backend == "stub" else "",
     }
-    if result.get("error"):
+    if backend_error:
+        # 后端错误也要留痕，而且要能和"查出来是空的"分开 —— 前者是我们的问题，
+        # 后者是业务事实。审计里混在一起的话，事后分不出哪次是真的没数据。
+        audit["error"] = backend_error
+        audit["backend_failed"] = True
+    elif result.get("error"):
         audit["error"] = result["error"]
     _audit(audit)
 
@@ -322,14 +383,15 @@ def handle_query_metric(args: Dict[str, Any], **_kwargs: Any) -> str:
         "dimensions": audit["dimensions"],
         "time_window": window,
         "rows": result.get("rows", []),
-        "meta": {
-            "backend": "stub",
-            "fixtures_version": fx.get("version", ""),
-            "scanned_rows": result.get("scanned_rows", 0),
-            "note": "阶段一桩数据，非真实业务数值，不可用于对外结论",
-        },
+        "meta": _meta(backend, fx, result),
     }
-    if result.get("error"):
+    if backend_error:
+        payload["error"] = backend_error
+        payload["rows"] = []
+        # 说清楚这不是"没有数据"，是"查不了" —— 两者对用户的含义完全不同。
+        payload["note"] = ("这次查询没有执行成功，返回的不是空结果而是失败。"
+                           "不要把它解释成「这段时间没有数据」。")
+    elif result.get("error"):
         payload["error"] = result["error"]
         if result.get("available_dimension_sets"):
             payload["available_dimension_sets"] = result["available_dimension_sets"]
