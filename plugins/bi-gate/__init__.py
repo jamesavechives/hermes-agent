@@ -60,6 +60,19 @@ GATED_TOOL = "query_metric"
 #: 这样「判定」和「执行」两行才连得起来 —— 对账不用靠计数。
 CALL_ID_ARG = "_bi_gate_call_id"
 
+
+def _profile_name() -> str:
+    """当前是哪个人格。取 ``HERMES_HOME`` 的目录名。
+
+    审计记录原先没有这一项 —— 一旦有第二个人格，就回答不了「这条判定是谁做的」。
+    探针记录一直有 profile，审计没有（和时间戳是同一天发现的同一类疏漏）。
+
+    这个值同时用于会话预算的播种过滤：两个 profile 共用一个审计文件时，
+    只按 session_id 过滤会把对方的扫描量算进自己的额度。
+    """
+    home = os.environ.get("HERMES_HOME", "").strip()
+    return Path(home).name if home else ""
+
 #: 注册表来源。留成环境变量是因为首批指标还在对齐口径，落地前会反复改；
 #: 指标层稳定后应改为从指标服务拉取并带版本号。
 REGISTRY_PATH_ENV = "BI_GATE_REGISTRY"
@@ -332,6 +345,8 @@ def _audit(
     """
     record = {
         "event": "bi_gate_verdict",
+        # 哪个人格。有第二个人格之后，没有这一项就回答不了「这条判定是谁做的」。
+        "profile": _profile_name(),
         # 时间戳。原先整个没有 —— 审计是合规唯一会查的东西，没有时间戳
         # 基本等于不可用：既回答不了"这次拦截什么时候发生的"，也没法按时间窗对账。
         # 2026-08-28 做审计上报时才发现（探针记录一直有 ts，审计没有）。
@@ -407,6 +422,7 @@ def _seed_session_from_audit(session_id: str) -> int:
     path = _audit_path()
     if path is None or not session_id:
         return 0
+    profile = _profile_name()
     total = 0
     try:
         with open(path, "r", encoding="utf-8") as fh:
@@ -417,6 +433,16 @@ def _seed_session_from_audit(session_id: str) -> int:
                 try:
                     rec = json.loads(line)
                 except ValueError:
+                    continue
+                # 同时按 profile 过滤。只按 session_id 的话，两个人格共用一个
+                # 审计文件时，A 的会话播种会把 B 放行过的扫描量算进 A 的额度 ——
+                # 表现是"莫名其妙额度就满了"，而且查不出为什么。
+                #
+                # 历史记录没有 profile 字段（2026-08-28 之前写的）。对它们放行，
+                # 不然升级那一刻所有会话的历史额度会突然归零 —— 那是把一个
+                # 兼容问题变成一次静默的约束放宽。
+                rec_profile = rec.get("profile")
+                if rec_profile not in (None, "", profile):
                     continue
                 if (
                     rec.get("session_id") == session_id

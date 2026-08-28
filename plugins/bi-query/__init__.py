@@ -260,6 +260,9 @@ def handle_query_metric(args: Dict[str, Any], **_kwargs: Any) -> str:
 
     audit: Dict[str, Any] = {
         "event": "executed",
+        # 哪个人格。和门禁那侧同一个取法（HERMES_HOME 的目录名），
+        # 这样对账时能按 profile 分开看，而不是把所有人格混成一摊。
+        "profile": Path(os.environ.get("HERMES_HOME", "")).name,
         # 时间戳与配对键。两个原先都没有：
         #   没时间戳 → 审计按时间窗查不了，也没法回答"这次执行发生在什么时候"
         #   没配对键 → 「判定」和「执行」两行连不起来，对账只能靠计数，
