@@ -132,6 +132,8 @@ def _fixtures_path() -> Path:
 
 
 def reload_fixtures() -> None:
+    global _stub_registry_cache
+    _stub_registry_cache = None
     """清空缓存，下次查询时重新读盘。测试与热更新用。"""
     global _fixtures_cache
     _fixtures_cache = None
@@ -165,10 +167,26 @@ def _days_in_window(window: Any) -> int:
 
 
 def _backend_stub(metric: str, dimensions: Optional[List[str]], window: Any) -> Dict[str, Any]:
-    """确定性桩后端。换成真实 StarRocks 时只替换这一个函数。"""
+    """确定性桩后端。换成真实 StarRocks 时只替换这一个函数。
+
+    先查手写的 fixtures；查不到就**按注册表现造一份**（见 :func:`_stub_from_registry`）。
+
+    为什么要有回落
+    --------------
+    2026-08-28 踩到的：注册表换成从数仓生成的那 80 个指标之后，fixtures 还是
+    老那套编出来的指标名。门禁放行、桩后端 ``no_fixture``、返回空行 ——
+    **两个真相来源又对不上了**，和当初手写注册表是同一个毛病。
+
+    fixtures 存在的理由是"给几个指标钉死可预期的返回值，方便测试断言"，
+    不是"另一份指标清单"。所以注册表里有、fixtures 里没有的，按注册表现造，
+    而不是报 no_fixture 让整条链断在这里。
+    """
     fx = _fixtures()
     table = fx.get("data", {}).get(metric)
     if table is None:
+        generated = _stub_from_registry(metric, dimensions, window)
+        if generated is not None:
+            return generated
         return {"error": "no_fixture", "rows": [], "scanned_rows": 0}
 
     rows = table.get(_dimension_key(dimensions))
@@ -183,6 +201,105 @@ def _backend_stub(metric: str, dimensions: Optional[List[str]], window: Any) -> 
     per_day = int(fx.get("rows_per_day", {}).get(metric, 1))
     scanned = per_day * _days_in_window(window) * max(1, len(rows))
     return {"rows": rows, "scanned_rows": scanned}
+
+
+def _stub_from_registry(metric: str, dimensions: Optional[List[str]],
+                       window: Any) -> Optional[Dict[str, Any]]:
+    """按注册表给一个注册过的指标现造桩数据。指标不在注册表里返回 ``None``。
+
+    造出来的值是**确定性**的（同样的指标 + 日期 + 维度永远同一个数），理由和
+    dev 复刻库那边一样：重跑一次不该让所有数字都变，否则对比差异时看不出
+    哪些变化是真的。
+
+    维度值取自注册表的 ``dimensions_catalog``（生成器量过基数、记下了取值范围
+    这件事本身）；取不到就用带「示例」字样的占位 —— 让人一眼知道不是真的。
+    """
+    import hashlib
+
+    reg = _load_registry_for_stub()
+    spec = (reg or {}).get("metrics_by_name", {}).get(metric)
+    if spec is None:
+        return None
+
+    dims = list(dimensions or [])
+    allowed = set(spec.get("dimensions") or ())
+    if any(d not in allowed for d in dims):
+        return {"error": "no_fixture_for_dimensions", "rows": [], "scanned_rows": 0,
+                "available_dimension_sets": [sorted(allowed)] if allowed else [[]]}
+
+    catalog = (reg or {}).get("dimensions_catalog", {}).get(
+        (spec.get("source") or {}).get("table"), [])
+    values = {d["name"]: d for d in catalog if isinstance(d, dict)}
+
+    def _num(*parts) -> int:
+        h = hashlib.sha256("|".join(str(x) for x in parts).encode("utf-8")).digest()
+        return 100 + int.from_bytes(h[:4], "big") % 900
+
+    if dims:
+        # 每个维度给 3 个取值，够看出「按维度拆」这件事生效了，又不至于刷屏。
+        combos = [()]
+        for d in dims:
+            n = min(3, max(1, int(values.get(d, {}).get("cardinality") or 3)))
+            combos = [c + (f"示例{d}-{i + 1}",) for c in combos for i in range(n)]
+        rows = [dict(zip(dims, combo), value=_num(metric, *combo)) for combo in combos]
+    else:
+        # 不带维度时**按天返回**，和真实后端的形状保持一致。
+        #
+        # 第一版这里返回一行合计。2026-08-28 真跑模型才看出后果：它照着桩数据的
+        # 形状告诉用户「日活不支持按天拆分，只能给整段聚合值」——**那对真实后端
+        # 是错的**（真后端按 time_column 分组，一天一行）。
+        #
+        # 桩数据和真实后端形状不一致，等于用 dev 教模型学一个到生产就不成立的
+        # 事实。而且它错得很隐蔽：桩数据那句「非真实数值」的免责声明只覆盖了
+        # **数值**，覆盖不了**形状**。形状必须真的一样。
+        time_col = (spec.get("source") or {}).get("time_column") or "bizdate"
+        rows = [{time_col: d.isoformat(), "value": _num(metric, d.isoformat())}
+                for d in _days_of(window)]
+        if not rows:
+            rows = [{"value": _num(metric)}]
+
+    per_day = int(spec.get("rows_per_day") or 1)
+    return {"rows": rows,
+            "scanned_rows": per_day * _days_in_window(window) * max(1, len(rows))}
+
+
+def _days_of(window: Any) -> List[Any]:
+    """时间窗覆盖的日期列表。解析不了就返回空 —— 不猜。"""
+    import datetime as _d
+    if not isinstance(window, dict):
+        return []
+    try:
+        start = _d.date.fromisoformat(str(window.get("start"))[:10])
+        end = _d.date.fromisoformat(str(window.get("end"))[:10])
+    except (TypeError, ValueError):
+        return []
+    if end < start:
+        return []
+    # 上限和真后端的 LIMIT 一个量级，避免一次问一年把上下文撑爆。
+    return [start + _d.timedelta(days=i)
+            for i in range(min((end - start).days + 1, 400))]
+
+
+_stub_registry_cache: Optional[Dict[str, Any]] = None
+_stub_registry_path: Optional[str] = None
+
+
+def _load_registry_for_stub() -> Optional[Dict[str, Any]]:
+    """读注册表，供桩后端现造数据用。读不到返回 ``None``（桩后端就回到 no_fixture）。"""
+    global _stub_registry_cache, _stub_registry_path
+    path = os.environ.get("BI_GATE_REGISTRY", "").strip()
+    if _stub_registry_cache is not None and path == _stub_registry_path:
+        return _stub_registry_cache
+    if not path:
+        return None
+    try:
+        with open(path, encoding="utf-8") as fh:
+            raw = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    raw["metrics_by_name"] = {m["name"]: m for m in raw.get("metrics", []) if m.get("name")}
+    _stub_registry_cache, _stub_registry_path = raw, path
+    return raw
 
 
 # ---------------------------------------------------------------------------

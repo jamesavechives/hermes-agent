@@ -304,3 +304,47 @@ def test_dev_registry_declares_itself_synthetic():
     notice = reg.get("data_notice") or ""
     assert "造出来的" in notice or "复刻" in notice, notice
     assert all(m["source"]["schema"] != "ads" for m in reg["metrics"])
+
+
+def test_stub_and_real_backend_return_the_same_shape(tmp_path, monkeypatch):
+    """桩数据和真实后端的**行形状必须一致**。
+
+    2026-08-28 真跑模型踩到的：桩数据不带维度时返回一行合计，真实后端按
+    time_column 分组返回一天一行。模型照着桩数据的形状告诉用户
+    「日活不支持按天拆分，只能给整段聚合值」—— **那对真实后端是错的**。
+
+    等于用 dev 教模型学一个到生产就不成立的事实。而且错得隐蔽：桩数据那句
+    「非真实数值」的免责声明只覆盖**数值**，覆盖不了**形状**。
+    """
+    reg = tmp_path / "reg.json"
+    reg.write_text(json.dumps(REGISTRY, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setenv("BI_GATE_REGISTRY", str(reg))
+    monkeypatch.setenv("BI_AUDIT_LOG", str(tmp_path / "a.jsonl"))
+    window = {"start": "2026-07-01", "end": "2026-07-05"}
+
+    # 桩
+    monkeypatch.setenv("BI_QUERY_BACKEND", "stub")
+    bq = _load("bi_query_shape_stub", QUERY_DIR / "__init__.py")
+    bq.reload_fixtures()
+    stub = json.loads(bq.handle_query_metric({
+        "metric": "overall.dau", "time_window": window,
+        "_bi_principal": P, "_bi_gate_call_id": "c"}))
+
+    # 真（把 mysql 的输出喂进去）
+    import subprocess
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(
+        [], 0, stdout="".join(f"2026-07-0{i}\t{100 + i}\n" for i in range(1, 6)), stderr=""))
+    monkeypatch.setenv("BI_QUERY_BACKEND", "starrocks")
+    monkeypatch.setenv("BI_SR_HOST", "h")
+    monkeypatch.setenv("BI_SR_USER", "u")
+    bq2 = _load("bi_query_shape_real", QUERY_DIR / "__init__.py")
+    bq2.reload_fixtures()
+    real = json.loads(bq2.handle_query_metric({
+        "metric": "overall.dau", "time_window": window,
+        "_bi_principal": P, "_bi_gate_call_id": "c"}))
+
+    assert len(stub["rows"]) == len(real["rows"]) == 5, (stub["rows"], real["rows"])
+    assert set(stub["rows"][0]) == set(real["rows"][0]), (
+        f"桩 {sorted(stub['rows'][0])} vs 真 {sorted(real['rows'][0])} —— "
+        f"形状不一致会让 dev 教出到生产就不成立的结论")
+    assert "bizdate" in stub["rows"][0]
