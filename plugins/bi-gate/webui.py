@@ -95,8 +95,20 @@ class App:
         self.query = _load("webui_bi_query", REPO / "plugins" / "bi-query")
         self.gate.reload_registry()
         self.query.reload_fixtures()
-        self.registry = json.loads(
-            Path(os.environ["BI_GATE_REGISTRY"]).read_text(encoding="utf-8"))
+        # 注册表读不到就说清楚。原来这里直接 `os.environ[...]` + `read_text()`，
+        # 没配就是 KeyError、路径错就是 FileNotFoundError —— 在 K8s 里表现为
+        # Pod 崩溃循环加一段栈，看的人得先猜是哪一种。容器化之后这个代价变大了。
+        reg_path = os.environ.get("BI_GATE_REGISTRY", "").strip()
+        if not reg_path:
+            raise SystemExit(
+                "拒绝启动：没有设置 BI_GATE_REGISTRY。\n"
+                "注册表决定这个人格能查什么 —— 没有它，门禁没有可判的依据。")
+        if not Path(reg_path).exists():
+            raise SystemExit(
+                f"拒绝启动：注册表 {reg_path} 不存在。\n"
+                f"容器部署时它在镜像的 /app/registries/ 下，不是 ConfigMap；\n"
+                f"裸进程部署时看 profile 的 .env。")
+        self.registry = json.loads(Path(reg_path).read_text(encoding="utf-8"))
         self.principals = json.loads(
             Path(os.environ.get("BI_GATE_PRINCIPAL_MAP", "/dev/null")).read_text(
                 encoding="utf-8")).get("principals", {}) if os.environ.get(

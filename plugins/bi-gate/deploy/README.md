@@ -53,9 +53,35 @@ kubectl apply -f plugins/bi-gate/deploy/k8s.yaml
 | Secret 里的 `BI_SR_PASSWORD` | dev StarRocks 的 `bi_agent_ro` 密码 |
 | ConfigMap 的 `principals.json` | 要能用的人的 Teleport 用户名 |
 
-`bi_registry.json`（80 个指标）目前不在清单里 —— 它有 60KB，塞 ConfigMap
-略大。两个选择：单独做一个 ConfigMap，或者打进镜像。**打进镜像更合适**，
-因为它是和代码一起演进的东西，不是部署方要改的配置。下次迭代做。
+## 注册表在镜像里，不在 ConfigMap
+
+`/app/registries/` 下有两份：
+
+| 文件 | 内容 |
+|---|---|
+| `registry.dev.json` | dev 复刻库的口径，**数值是造的**（体验用这个，默认） |
+| `registry.ads.json` | 生产 `ads` 层口径，真实数据（需要生产账号才用得上） |
+
+**为什么不放 ConfigMap**：注册表是和代码一起演进的东西（由
+`build_registry_from_ads.py` 从数仓元数据生成，口径变了要重新生成），
+不是部署方要改的配置。放 ConfigMap 会让「镜像里的代码」和「集群里的口径」
+各走各的版本 —— 那正是这套东西一路在防的漂移。60KB，打进去的代价可以忽略。
+
+切换用 `.env` 里的 `BI_GATE_REGISTRY` 指向哪一份，不用重建镜像。
+
+**注册表读不到会拒绝启动并说清原因**（不是抛一段栈）：
+
+```
+拒绝启动：注册表 /app/registries/不存在.json 不存在。
+容器部署时它在镜像的 /app/registries/ 下，不是 ConfigMap；
+裸进程部署时看 profile 的 .env。
+```
+
+这条在容器里特别要紧 —— 不然表现就是 Pod 崩溃循环，看的人得先猜是哪种原因。
+
+顺带去掉了 initContainer 里的 `cp /cfg/bi_registry.json ... || true`：
+那个 `|| true` 会在文件不存在时静默跳过，于是 initContainer 是绿的、
+主容器起来才崩。**「悄悄跳过」正是这套东西一路在防的那种失效。**
 
 ## 部署后请运维加一条 Teleport 应用
 
@@ -81,6 +107,15 @@ catalog     mode=teleport, 80 指标
 ```
 
 行为和裸进程完全一致。
+
+打进注册表后又验了一轮：
+
+```
+镜像里         registry.ads.json 66586 / registry.dev.json 62644
+启动           指标 80 个（来自镜像，profile 里没有注册表文件）
+catalog        mode=teleport, 80 指标
+注册表路径写错  拒绝启动，报错指明「在镜像的 /app/registries/ 下，不是 ConfigMap」
+```
 
 ## 两个已知待办
 

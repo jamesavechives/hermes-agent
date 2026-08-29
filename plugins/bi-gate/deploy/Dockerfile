@@ -39,6 +39,16 @@ COPY plugins/bi-gate/   /app/plugins/bi-gate/
 COPY plugins/bi-query/  /app/plugins/bi-query/
 COPY model_tools.py     /app/model_tools.py
 
+# 指标注册表打进镜像，不走 ConfigMap。
+#
+# 它是**和代码一起演进**的东西（由 build_registry_from_ads.py 从数仓元数据生成，
+# 口径变了要重新生成），不是部署方要改的配置。放 ConfigMap 会让「镜像里的代码」
+# 和「集群里的口径」各走各的版本 —— 那正是这套东西一路在防的漂移。
+#
+# 60KB，打进镜像的代价可以忽略。
+COPY plugins/bi-gate/registry.dev.json  /app/registries/registry.dev.json
+COPY plugins/bi-gate/registry.ads.json  /app/registries/registry.ads.json
+
 ENV PYTHONPATH=/app \
     PYTHONUNBUFFERED=1
 

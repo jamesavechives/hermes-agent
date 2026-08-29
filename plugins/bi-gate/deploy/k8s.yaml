@@ -20,7 +20,11 @@ metadata:
 data:
   # 不含任何凭据 —— 密码在下面的 Secret 里，容器启动时拼进 .env。
   env.public: |
-    BI_GATE_REGISTRY=/profile/bi_registry.json
+    # 注册表在镜像里（/app/registries/），不在 ConfigMap ——
+    # 它跟代码一起演进，不该由部署方单独改。
+    #   registry.dev.json  dev 复刻库，数值是造的（体验用这个）
+    #   registry.ads.json  生产 ads 层口径，真实数据（需要生产账号才用得上）
+    BI_GATE_REGISTRY=/app/registries/registry.dev.json
     BI_GATE_PRINCIPAL_MAP=/profile/principals.json
     BI_GATE_TOOLS=query_metric
     BI_GATE_ACTION_MAX=L1
@@ -84,7 +88,10 @@ spec:
             - |
               set -e
               cp /cfg/principals.json /profile/principals.json
-              cp /cfg/bi_registry.json /profile/bi_registry.json 2>/dev/null || true
+              # 注意：这里**不再拷注册表** —— 它在镜像里。
+              # 原来那行写的是 `cp ... || true`，注册表不存在时静默跳过，
+              # 于是容器起来后才因为读不到注册表崩掉，而 initContainer 是绿的。
+              # 「悄悄跳过」正是这套东西一路在防的那种失效。
               cat /cfg/env.public > /profile/.env
               echo "BI_SR_PASSWORD=${BI_SR_PASSWORD}" >> /profile/.env
               chmod 600 /profile/.env
