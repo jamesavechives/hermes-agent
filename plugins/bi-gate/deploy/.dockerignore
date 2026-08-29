@@ -1,0 +1,9 @@
+# 只是提示：真正的裁剪靠 Dockerfile 里显式 COPY 哪些目录。
+.git
+.venv
+tests
+website
+apps
+optional-skills
+**/__pycache__
+**/*.pyc

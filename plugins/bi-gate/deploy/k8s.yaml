@@ -1,0 +1,145 @@
+# BI 助手体验页 —— K8s 部署清单
+#
+# 部署后请运维在 Teleport app service 加一条：
+#
+#   - name: bi-agent-demo
+#     uri: http://bi-agent-demo.<本清单所在 namespace>.svc.cluster.local:8800
+#     public_addr: bi-agent.dev.decodebackoffice.com
+#     labels: {env: dev, owner: james.qian}
+#
+# 这样 uri 就和现有 98 个应用一样是集群内地址，不需要为我们单开网络。
+#
+# ⚠️ namespace 按你们的规范改。下面用 crypto，因为 hermes 相关的东西在那儿。
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bi-agent-demo-profile
+  namespace: crypto
+  labels: {app: bi-agent-demo}
+data:
+  # 不含任何凭据 —— 密码在下面的 Secret 里，容器启动时拼进 .env。
+  env.public: |
+    BI_GATE_REGISTRY=/profile/bi_registry.json
+    BI_GATE_PRINCIPAL_MAP=/profile/principals.json
+    BI_GATE_TOOLS=query_metric
+    BI_GATE_ACTION_MAX=L1
+    BI_GATE_SESSION_SCAN_MAX=300000000
+    BI_GATE_ALLOWED_ORIGINS=human
+    BI_AUDIT_LOG=/audit/bi.jsonl
+    BI_QUERY_BACKEND=starrocks
+    BI_SR_HOST=10.10.2.17
+    BI_SR_PORT=32100
+    BI_SR_USER=bi_agent_ro
+
+  # 谁能查数据。**门禁不认没登记的人** —— 这是有意的。
+  # aliases 里挂同一个人在各入口的标识：Teleport 用户名 / 飞书 open_id。
+  principals.json: |
+    {
+      "principals": {
+        "james.qian": {
+          "subject": "bi_james",
+          "display": "James Qian",
+          "aliases": ["james.qian", "ou_dev_test_analyst"]
+        }
+      }
+    }
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: bi-agent-demo-secret
+  namespace: crypto
+  labels: {app: bi-agent-demo}
+type: Opaque
+stringData:
+  # 由部署方填。不要提交到仓库。
+  BI_SR_PASSWORD: "REPLACE_ME"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bi-agent-demo
+  namespace: crypto
+  labels: {app: bi-agent-demo}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: bi-agent-demo}
+  template:
+    metadata:
+      labels: {app: bi-agent-demo}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+      initContainers:
+        # 把公开配置和 Secret 拼成一个 .env —— webui 读 profile 目录下的 .env。
+        # 分开放是为了让 ConfigMap 可以随便看，凭据只在 Secret 里。
+        - name: build-profile
+          image: busybox:1.36
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              cp /cfg/principals.json /profile/principals.json
+              cp /cfg/bi_registry.json /profile/bi_registry.json 2>/dev/null || true
+              cat /cfg/env.public > /profile/.env
+              echo "BI_SR_PASSWORD=${BI_SR_PASSWORD}" >> /profile/.env
+              chmod 600 /profile/.env
+          env:
+            - name: BI_SR_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: bi-agent-demo-secret, key: BI_SR_PASSWORD}
+          volumeMounts:
+            - {name: cfg,     mountPath: /cfg}
+            - {name: profile, mountPath: /profile}
+      containers:
+        - name: webui
+          image: REGISTRY/bi-agent-demo:TAG      # 由 CI 或手工替换
+          imagePullPolicy: IfNotPresent
+          ports:
+            - {name: http, containerPort: 8800}
+          volumeMounts:
+            - {name: profile, mountPath: /profile}
+            - {name: audit,   mountPath: /audit}
+          # 就绪/存活都打首页。首页不需要身份（catalog 是公开的），
+          # 所以探针不用带 Teleport JWT —— 真正的鉴权在 /api/query 上。
+          readinessProbe:
+            httpGet: {path: /, port: http}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /, port: http}
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          resources:
+            requests: {cpu: 50m,  memory: 128Mi}
+            limits:   {cpu: 500m, memory: 512Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+      volumes:
+        - name: cfg
+          configMap: {name: bi-agent-demo-profile}
+        - name: profile
+          emptyDir: {}
+        # 审计先落 emptyDir。**这意味着 Pod 重启审计就没了** ——
+        # 上线前要换成 PVC 或直接推 VictoriaLogs（我们已有 audit_shipper）。
+        # 留在这里是为了让这件事被看见，而不是默默丢。
+        - name: audit
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bi-agent-demo
+  namespace: crypto
+  labels: {app: bi-agent-demo}
+spec:
+  type: ClusterIP          # 只给集群内的 Teleport app service 用，不对外
+  selector: {app: bi-agent-demo}
+  ports:
+    - {name: http, port: 8800, targetPort: http}
